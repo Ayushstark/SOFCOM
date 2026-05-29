@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NL App Compiler — Natural Language to Validated App</title>
+  <meta name="description" content="Compiler-style engine that transforms natural language product prompts into fully validated, executable application configurations." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css?v=1.1.2" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="logo">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect width="28" height="28" rx="7" fill="url(#g)"/><path d="M8 14l4 4 8-8" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><defs><linearGradient id="g" x1="0" y1="0" x2="28" y2="28"><stop stop-color="#6366f1"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs></svg>
+        <span>NL App Compiler</span>
+      </div>
+      <p class="eyebrow">Compiler-style software generation</p>
+    </div>
+    <div class="topbar-right">
+      <div class="status-badge" id="modeBadge">deterministic-local</div>
+    </div>
+  </header>
+
+  <main class="shell">
+    <!-- LEFT: Prompt + Controls -->
+    <section class="workspace">
+      <div class="prompt-panel glass">
+        <label for="prompt">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v1H2V3zm0 3h12v1H2V6zm0 3h8v1H2V9zm0 3h10v1H2v-1z"/></svg>
+          Product prompt
+        </label>
+        <textarea id="prompt" placeholder="e.g. Build a CRM with login, contacts, dashboard, role-based access, premium plan with payments. Admins can see analytics.">Build a CRM with login, contacts, dashboard, role-based access, premium plan with payments. Admins can see analytics.</textarea>
+        <div class="actions">
+          <button id="generate" class="btn-primary">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 3l6 5-6 5"/></svg>
+            Generate
+          </button>
+          <button id="evaluate" class="btn-secondary">Run Full Eval (20 prompts)</button>
+        </div>
+      </div>
+
+      <!-- Pipeline Stage Indicator -->
+      <div class="stage-strip" id="stages">
+        <div class="stage" data-stage="1"><span class="stage-dot"></span>Intent</div>
+        <div class="stage" data-stage="2"><span class="stage-dot"></span>Design</div>
+        <div class="stage" data-stage="3"><span class="stage-dot"></span>Schema</div>
+        <div class="stage" data-stage="4"><span class="stage-dot"></span>Repair</div>
+        <div class="stage" data-stage="5"><span class="stage-dot"></span>Runtime</div>
+      </div>
+
+      <!-- Metrics Cards -->
+      <div class="metrics-grid" id="metricsGrid">
+        <div class="metric-card glass">
+          <div class="metric-label">Latency</div>
+          <div class="metric-value" id="metricLatency">—</div>
+        </div>
+        <div class="metric-card glass">
+          <div class="metric-label">Repair Passes</div>
+          <div class="metric-value" id="metricRepairs">—</div>
+        </div>
+        <div class="metric-card glass">
+          <div class="metric-label">Issues Found</div>
+          <div class="metric-value" id="metricIssues">—</div>
+        </div>
+        <div class="metric-card glass">
+          <div class="metric-label">Status</div>
+          <div class="metric-value" id="metricStatus">—</div>
+        </div>
+      </div>
+
+      <!-- Validation Issues -->
+      <section class="panel glass" id="validationPanel" style="display:none;">
+        <h2>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 10.5a.75.75 0 110-1.5.75.75 0 010 1.5zM8.75 8a.75.75 0 01-1.5 0V5a.75.75 0 011.5 0v3z"/></svg>
+          Validation &amp; Repair Report
+        </h2>
+        <div id="validation" class="issue-list"></div>
+      </section>
+
+      <!-- Assumptions & Clarifications -->
+      <section class="panel glass" id="assumptionsPanel" style="display:none;">
+        <h2>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm-.75 10.5v-1.5h1.5v1.5h-1.5zm.75-3a.75.75 0 01-.75-.75V5.5a.75.75 0 011.5 0v2.25a.75.75 0 01-.75.75z"/></svg>
+          Assumptions &amp; Clarifications
+        </h2>
+        <div id="assumptions" class="issue-list"></div>
+      </section>
+
+      <!-- Generated JSON -->
+      <section class="panel glass">
+        <h2>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2V4a2 2 0 00-2-2H4zm1 3h6v1H5V5zm0 2.5h6v1H5v-1zm0 2.5h4v1H5v-1z"/></svg>
+          Generated Config
+        </h2>
+        <pre id="json">{}</pre>
+      </section>
+
+      <!-- Runtime Preview -->
+      <section class="panel glass" id="previewPanel" style="display:none;">
+        <h2>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 4a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V4zm2 0v5h8V4H4z"/></svg>
+          Runtime Preview
+        </h2>
+        <div id="previewLink"></div>
+      </section>
+    </section>
+
+    <!-- RIGHT: Live Compiler Log -->
+    <aside class="log-panel">
+      <div class="log-header">
+        <h2>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3.5A1.5 1.5 0 013.5 2h9A1.5 1.5 0 0114 3.5v9a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 12.5v-9zM4 5v1h8V5H4zm0 2.5v1h8v-1H4zm0 2.5v1h6v-1H4z"/></svg>
+          Compiler Log
+        </h2>
+        <button class="btn-icon" id="clearLog" title="Clear log">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 2l10 10M12 2L2 12"/></svg>
+        </button>
+      </div>
+      <div id="logStream" class="log-stream">
+        <div class="log-entry log-info"><span class="log-badge">SYS</span> Ready. Enter a prompt and click Generate.</div>
+      </div>
+    </aside>
+  </main>
+
+  <script src="/static/app.js?v=1.1.2"></script>
+</body>
+</html>

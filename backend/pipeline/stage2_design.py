@@ -1,0 +1,74 @@
+from __future__ import annotations
+
+import re
+
+from backend.schemas import AppArchSpec, IntentGraph
+from backend.llm.client import LLMClient
+
+
+def _title_from_prompt(prompt: str, product_type: str) -> str:
+    match = re.search(r"build\s+(?:a|an)?\s*([a-zA-Z ]{3,32}?)(?:\s+with|\s+for|$)", prompt, re.I)
+    if match:
+        title = match.group(1).strip()
+        if title:
+            return " ".join(word.capitalize() for word in title.split())
+    return f"{product_type.capitalize()} Compiler App"
+
+
+async def design_system(intent: IntentGraph, llm: LLMClient) -> AppArchSpec:
+    if llm.is_configured():
+        sys_prompt = f"""You are a Systems Architect. Convert this parsed user intent into an architecture specification.
+Return exact JSON matching this schema:
+{{
+  "app_name": "string (catchy name for this app based on the prompt)",
+  "product_type": "{intent.product_type}",
+  "entities": {intent.entities},
+  "roles": {intent.roles},
+  "flows": ["list of strings (core user journeys, e.g. 'Admin reviews analytics', 'User upgrades plan')"],
+  "pages": ["list of strings (UI page names, e.g. 'Dashboard', 'Login', 'Billing')"],
+  "business_rules": {intent.business_rules},
+  "assumptions": {intent.assumptions}
+}}
+
+Keep the exact entities, roles, business_rules, and assumptions passed below. Expand on flows and pages.
+Intent JSON:
+{intent.model_dump_json()}
+"""
+        try:
+            data = await llm.generate_json(sys_prompt, temperature=0.2)
+            # Ensure critical lists match intent
+            data["entities"] = intent.entities
+            data["roles"] = intent.roles
+            data["product_type"] = intent.product_type
+            return AppArchSpec(**data)
+        except Exception:
+            pass  # Fallback
+
+    pages = ["Login", "Dashboard"]
+    if "payments" in intent.features:
+        pages.append("Billing")
+    if "analytics" in intent.features:
+        pages.append("Analytics")
+    for entity in intent.entities:
+        if entity != "users":
+            pages.append(entity.replace("_", " ").title())
+
+    flows = [
+        "Visitor signs in and receives role-aware navigation.",
+        "Authenticated user reads and updates permitted business records.",
+    ]
+    if "payments" in intent.features:
+        flows.append("User upgrades plan; subscription status unlocks premium pages and API actions.")
+    if "analytics" in intent.features:
+        flows.append("Admin reviews analytics computed from core business tables.")
+
+    return AppArchSpec(
+        app_name=_title_from_prompt(intent.original_prompt, intent.product_type),
+        product_type=intent.product_type,
+        entities=intent.entities,
+        roles=intent.roles,
+        flows=flows,
+        pages=pages,
+        business_rules=intent.business_rules,
+        assumptions=intent.assumptions,
+    )
