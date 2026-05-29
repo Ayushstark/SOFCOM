@@ -1,30 +1,66 @@
-# Architecture
+# SOFCOM Architecture
 
-## Data Flow
+## End-to-End Flow
 
-Prompt -> `IntentGraph` -> `AppArchSpec` -> UI/API/DB/Auth schemas -> validation -> targeted repair -> runtime simulation -> generated app preview
+`Prompt`  
+-> `IntentGraph`  
+-> `AppArchSpec`  
+-> `UI/API/DB/Auth schemas`  
+-> `Validation`  
+-> `Targeted repair passes`  
+-> `Runtime simulation`  
+-> `Executable result + metrics`
 
-## Modules
+## Pipeline Boundaries
 
-- `backend/schemas`: strict Pydantic contracts.
-- `backend/pipeline`: four-stage compiler pipeline.
-- `backend/repair`: cross-layer validators and deterministic repairs.
-- `backend/runtime`: execution simulator that writes generated app files.
-- `backend/evaluation`: 10 product prompts and 10 edge cases with metrics.
-- `api/main.py`: FastAPI interface and static frontend hosting.
-- `frontend`: prompt UI, metrics, JSON viewer, Spline visual panel.
+1. `stage1_intent.py`
+   - parses natural language into typed intent
+2. `stage2_design.py`
+   - transforms intent into system architecture
+3. `stage3_schema.py`
+   - generates UI/API/DB/Auth schema layers
+4. `stage4_refinement.py`
+   - validates, repairs, simulates runtime, records metrics
 
-## Validation Rules
+## Strict Contracts
 
-- UI pages and API endpoints must exist.
-- Auth-aware apps require a users table.
-- API response entities must map to DB tables.
-- API request fields must map to DB columns.
-- UI component endpoints must exist.
-- UI component entities and fields must map to DB schema.
-- Premium business rules must include billing and a premium role.
-- Ambiguous prompts must carry assumptions or clarification signals.
+All stage outputs are validated through Pydantic models in:
+- `backend/schemas/final_config.py`
 
-## Reliability Strategy
+Core guarantees:
+- valid typed output objects
+- required fields present
+- cross-layer consistency checks before runtime pass
 
-The system avoids single-prompt generation. Each stage produces typed intermediate output, then validators catch mismatches across layers. Repairs are targeted: missing role, missing endpoint, missing DB field, and missing billing artifacts are fixed locally instead of retrying the whole compile.
+## Validation and Repair
+
+Validator (`backend/repair/validators.py`) enforces:
+- UI/API/DB/Auth presence
+- API response entity exists in DB
+- API request fields map to DB columns
+- UI component endpoints/entities/fields map correctly
+- role consistency across UI/API/Auth
+- premium business-rule coherence
+
+Repair engine (`backend/repair/engine.py`) performs:
+- issue-code-driven targeted fixes
+- bounded iterative re-validation
+- no blind full-pipeline regeneration
+
+## Execution Awareness
+
+Runtime simulator (`backend/runtime/simulator.py`):
+- blocks runtime pass if unresolved validation errors exist
+- generates runtime artifact in `generated_apps/<app_id>/index.html`
+- returns executable status + runtime issues
+
+## Evaluation + Metrics
+
+Evaluation runner (`backend/evaluation/runner.py`):
+- executes 20-prompt dataset
+- reports:
+  - success rate
+  - retries per request
+  - failure type distribution
+  - latency
+  - cost vs quality summary
