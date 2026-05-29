@@ -47,6 +47,7 @@ type EvaluationResponse = {
 }
 
 const STAGES = ['intent', 'design', 'schema', 'repair', 'runtime', 'metrics'] as const
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 const TESTING_PROMPTS: Array<{ kind: 'product' | 'edge'; prompt: string }> = [
   { kind: 'product', prompt: 'Build a CRM with login, contacts, dashboard, role-based access, premium plan with payments. Admins can see analytics.' },
   { kind: 'product', prompt: 'Create an ecommerce store with products, orders, customers, checkout payments, and admin analytics.' },
@@ -79,7 +80,7 @@ export function Dashboard() {
   const tokenCount = Math.round(prompt.length * 1.4)
   const compile = useMutation({
     mutationFn: async (inputPrompt: string) => {
-      const res = await fetch('http://127.0.0.1:8000/generate', {
+      const res = await fetch(`${API_BASE_URL}/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: inputPrompt }),
@@ -93,7 +94,7 @@ export function Dashboard() {
   const evaluation = useQuery({
     queryKey: ['evaluation'],
     queryFn: async () => {
-      const res = await fetch('http://127.0.0.1:8000/evaluate', {
+      const res = await fetch(`${API_BASE_URL}/evaluate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
