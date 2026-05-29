@@ -21,7 +21,7 @@ FRONTEND = ROOT / "frontend"
 load_dotenv(ROOT / ".env")
 llm_client = LLMClient()
 
-app = FastAPI(title="NL App Compiler", version="0.2.0")
+app = FastAPI(title="SOFCOM API", version="0.2.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:4173", "http://localhost:4173", "http://127.0.0.1:5173", "http://localhost:5173"],
@@ -32,7 +32,7 @@ app.add_middleware(
 
 if FRONTEND.exists():
     app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
-GENERATED_ROOT.mkdir(exist_ok=True)
+GENERATED_ROOT.mkdir(parents=True, exist_ok=True)
 app.mount("/apps", StaticFiles(directory=GENERATED_ROOT), name="apps")
 
 
@@ -42,6 +42,8 @@ class GenerateRequest(BaseModel):
 
 @app.get("/")
 def home() -> FileResponse:
+    if not (FRONTEND / "index.html").exists():
+        return FileResponse((ROOT / "README.md"))
     return FileResponse(FRONTEND / "index.html")
 
 

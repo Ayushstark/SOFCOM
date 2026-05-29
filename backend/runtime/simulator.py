@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from backend.schemas import AppConfig, RuntimeResult, ValidationIssue
 
 
-GENERATED_ROOT = Path("generated_apps")
+GENERATED_ROOT = Path("/tmp/generated_apps") if os.getenv("VERCEL") else Path("generated_apps")
 
 
 def _render_html(config: AppConfig) -> str:
