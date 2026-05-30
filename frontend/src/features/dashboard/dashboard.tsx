@@ -194,7 +194,7 @@ export function Dashboard() {
       <Topbar onCommand={() => setCommandOpen(true)} />
       <div className="relative mx-auto flex max-w-[1680px] gap-4 px-4 pb-5 pt-24 lg:px-6">
         <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} activeTab={activeTab} setActiveTab={setActiveTab} />
-        <main className="grid min-h-[calc(100vh-7rem)] flex-1 grid-cols-1 gap-4">
+        <main className="grid min-h-[calc(100vh-7rem)] min-w-0 flex-1 grid-cols-1 gap-4">
           <EvaluationBar
             data={evaluation.data}
             loading={evaluation.isLoading || evaluation.isFetching}
@@ -207,22 +207,22 @@ export function Dashboard() {
               runCompile(selectedPrompt)
             }}
           />
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.3fr_1fr_0.92fr]">
+          <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(640px,1fr)_minmax(420px,0.72fr)]">
           {activeTab === 'overview' && (
             <>
-              <section className="space-y-4 xl:col-span-2">
+              <section className="min-w-0 space-y-4">
                 <Hero appName={compile.data?.config.app_name} />
                 <MetricCards metrics={compile.data?.config.metrics} />
                 <RuntimeChart compileHistory={compileHistory} />
               </section>
-              <section className="space-y-4">
+              <section className="min-w-0 space-y-4">
                 <Assistant issues={compile.data?.config.validation_report ?? []} runtime={compile.data?.config.runtime} />
               </section>
             </>
           )}
           {activeTab === 'compiler' && (
             <>
-              <section className="space-y-4 xl:col-span-2">
+              <section className="min-w-0 space-y-4">
                 <Hero appName={compile.data?.config.app_name} />
                 <PromptCenter
                   prompt={prompt}
@@ -236,7 +236,7 @@ export function Dashboard() {
                 <Pipeline stages={stageState} />
                 <ConfigEditor view={view} setView={setView} config={compile.data?.config} previousConfig={previousConfig} />
               </section>
-              <section className="space-y-4">
+              <section className="min-w-0 space-y-4">
                 <MetricCards metrics={compile.data?.config.metrics} />
                 <RuntimeChart compileHistory={compileHistory} />
                 <LiveLogs lines={logText} loading={compile.isPending} />
@@ -246,11 +246,11 @@ export function Dashboard() {
           )}
           {activeTab === 'runtime' && (
             <>
-              <section className="space-y-4 xl:col-span-2">
+              <section className="min-w-0 space-y-4">
                 <Panel><p className="text-sm font-semibold">Runtime Monitoring</p><p className="mt-2 text-sm text-text-secondary">Execution health, generated artifacts, and route readiness from simulation.</p></Panel>
                 <RuntimeChart compileHistory={compileHistory} />
               </section>
-              <section className="space-y-4">
+              <section className="min-w-0 space-y-4">
                 <MetricCards metrics={compile.data?.config.metrics} />
                 <Assistant issues={compile.data?.config.validation_report ?? []} runtime={compile.data?.config.runtime} />
               </section>
@@ -258,22 +258,22 @@ export function Dashboard() {
           )}
           {activeTab === 'logs' && (
             <>
-              <section className="space-y-4 xl:col-span-2">
+              <section className="min-w-0 space-y-4">
                 <Panel><p className="text-sm font-semibold">Compiler Logs</p><p className="mt-2 text-sm text-text-secondary">Stage-by-stage output from the backend pipeline.</p></Panel>
                 <LiveLogs lines={logText} loading={compile.isPending} />
               </section>
-              <section className="space-y-4">
+              <section className="min-w-0 space-y-4">
                 <MetricCards metrics={compile.data?.config.metrics} />
               </section>
             </>
           )}
           {activeTab === 'agents' && (
             <>
-              <section className="space-y-4 xl:col-span-2">
+              <section className="min-w-0 space-y-4">
                 <Panel><p className="text-sm font-semibold">Agent Control Plane</p><p className="mt-2 text-sm text-text-secondary">Intent, schema, repair, and runtime agents coordinating compilation.</p></Panel>
                 <Pipeline stages={stageState} />
               </section>
-              <section className="space-y-4">
+              <section className="min-w-0 space-y-4">
                 <Assistant issues={compile.data?.config.validation_report ?? []} runtime={compile.data?.config.runtime} />
               </section>
             </>
@@ -423,7 +423,7 @@ function PromptCenter({
 
 function Pipeline({ stages }: { stages: Array<{ name: string; status: 'active' | 'success' | 'error' }> }) {
   const statusClass = { active: 'bg-cyan-400 shadow-glow-cyan', success: 'bg-emerald-400 shadow-glow-green', error: 'bg-rose-400 shadow-[0_0_20px_rgba(244,63,94,0.45)]' }
-  return <Panel><p className="mb-3 text-sm font-semibold">Compilation Pipeline</p><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{stages.map((stage, i) => <motion.div key={stage.name} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="rounded-xl border border-white/10 bg-black/30 p-3"><div className="mb-2 flex items-center justify-between"><p className="text-sm capitalize">{stage.name}</p><span className={cn('h-2.5 w-2.5 rounded-full animate-pulse', statusClass[stage.status])} /></div><div className="h-1.5 overflow-hidden rounded-full bg-white/10"><motion.div initial={{ width: 0 }} animate={{ width: stage.status === 'success' ? '100%' : '60%' }} className="h-full bg-gradient-cyber" /></div></motion.div>)}</div></Panel>
+  return <Panel><p className="mb-3 text-sm font-semibold">Compilation Pipeline</p><div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">{stages.map((stage, i) => <motion.div key={stage.name} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="min-h-[74px] min-w-[150px] rounded-xl border border-white/10 bg-black/30 p-3"><div className="mb-3 flex items-center justify-between gap-3"><p className="truncate text-sm font-medium capitalize">{stage.name}</p><span className={cn('h-2.5 w-2.5 shrink-0 rounded-full animate-pulse', statusClass[stage.status])} /></div><div className="h-1.5 overflow-hidden rounded-full bg-white/10"><motion.div initial={{ width: 0 }} animate={{ width: stage.status === 'success' ? '100%' : '60%' }} className="h-full bg-gradient-cyber" /></div></motion.div>)}</div></Panel>
 }
 
 function toYaml(value: unknown, indent = 0): string {
@@ -476,7 +476,7 @@ function ConfigEditor({
   const diffText = buildDiff(jsonObj, previousConfig ?? null)
   const display = view === 'json' ? json : view === 'yaml' ? yaml : diffText
   const language = view === 'yaml' ? 'yaml' : 'json'
-  return <Panel className="p-0"><div className="flex items-center justify-between border-b border-white/10 p-3"><div className="flex gap-1">{(['json', 'yaml', 'diff'] as const).map((item) => <button key={item} onClick={() => setView(item)} className={cn('rounded-lg px-2 py-1 text-xs', view === item ? 'bg-white/10 text-white' : 'text-text-secondary')}>{item.toUpperCase()}</button>)}</div><div className="flex gap-2"><button onClick={() => navigator.clipboard.writeText(display)} className="icon-btn"><Copy className="h-4 w-4" /></button><button className="icon-btn"><Download className="h-4 w-4" /></button></div></div><div className="h-[310px]"><Editor theme="vs-dark" defaultLanguage={language} options={{ minimap: { enabled: true }, fontSize: 13 }} value={display} /></div></Panel>
+  return <Panel className="min-w-0 p-0"><div className="flex items-center justify-between border-b border-white/10 p-3"><div className="flex min-w-max gap-2">{(['json', 'yaml', 'diff'] as const).map((item) => <button key={item} onClick={() => setView(item)} className={cn('min-w-[58px] rounded-lg px-3 py-1.5 text-xs font-semibold', view === item ? 'bg-white/10 text-white' : 'text-text-secondary')}>{item.toUpperCase()}</button>)}</div><div className="flex shrink-0 gap-2"><button onClick={() => navigator.clipboard.writeText(display)} className="icon-btn"><Copy className="h-4 w-4" /></button><button className="icon-btn"><Download className="h-4 w-4" /></button></div></div><div className="h-[310px] min-w-0"><Editor theme="vs-dark" defaultLanguage={language} options={{ minimap: { enabled: true }, fontSize: 13 }} value={display} /></div></Panel>
 }
 
 function MetricCards({ metrics }: { metrics?: CompileResponse['config']['metrics'] }) {
