@@ -50,7 +50,7 @@ const STAGES = ['intent', 'design', 'schema', 'repair', 'runtime', 'metrics'] as
 const RAW_API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 const API_BASE_URL = RAW_API_BASE_URL
   || (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
-    ? 'https://sofcom-backend.vercel.app'
+    ? '/backend'
     : 'http://127.0.0.1:8000')
 const TESTING_PROMPTS: Array<{ kind: 'product' | 'edge'; prompt: string }> = [
   { kind: 'product', prompt: 'Build a CRM with login, contacts, dashboard, role-based access, premium plan with payments. Admins can see analytics.' },
