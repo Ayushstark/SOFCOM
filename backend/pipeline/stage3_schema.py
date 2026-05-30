@@ -59,7 +59,7 @@ def _entity_fields(entity: str) -> list[DBColumn]:
 
 
 async def generate_db_schema(arch: AppArchSpec, llm: LLMClient) -> list[DBTable]:
-    if llm.is_configured() and arch.product_type != "event_booking":
+    if llm.is_configured():
         sys_prompt = f"""You are a Database Architect. Generate the database schema for: {arch.app_name}.
 Entities to include: {['users', *arch.entities]}
 For each table, provide the name and columns.
@@ -80,7 +80,7 @@ Always include an 'id' string column for every table.
 
 
 async def generate_api_schema(arch: AppArchSpec, llm: LLMClient) -> list[APIEndpoint]:
-    if llm.is_configured() and arch.product_type != "event_booking":
+    if llm.is_configured():
         sys_prompt = f"""You are an API Architect. Generate the API schema for: {arch.app_name}.
 Entities: {arch.entities}
 Roles: {arch.roles}
@@ -114,7 +114,7 @@ Include CRUD endpoints for all entities and /auth/login.
 
 
 async def generate_ui_schema(arch: AppArchSpec, llm: LLMClient) -> list[UIPage]:
-    if llm.is_configured() and arch.product_type != "event_booking":
+    if llm.is_configured():
         sys_prompt = f"""You are a Frontend Architect. Generate the UI schema for: {arch.app_name}.
 Pages needed: {arch.pages}
 Roles: {arch.roles}
@@ -129,88 +129,95 @@ JSON Schema: list of objects with 'route', 'title', 'roles' (list), 'layout' (da
                 raise
             pass
 
-    if arch.product_type == "event_booking":
-        return [
-            UIPage(
-                route="/",
-                title="Home",
-                roles=["public"],
-                layout="landing",
-                components=[
-                    UIComponent(id="hero_event_search", type="form", entity="events", fields=["title", "starts_at"], endpoint="/api/events"),
-                    UIComponent(id="featured_events", type="list", entity="events", fields=["title", "starts_at", "status"], endpoint="/api/events"),
-                ],
-            ),
-            UIPage(
-                route="/events",
-                title="Events",
-                roles=["public"],
-                layout="crud",
-                components=[UIComponent(id="event_listings", type="list", entity="events", fields=["title", "starts_at", "status"], endpoint="/api/events")],
-            ),
-            UIPage(
-                route="/events/:id",
-                title="Event Details",
-                roles=["public"],
-                layout="landing",
-                components=[
-                    UIComponent(id="event_detail", type="stat", entity="events", fields=["title", "starts_at", "description"], endpoint="/api/events"),
-                    UIComponent(id="ticket_options", type="list", entity="tickets", fields=["price", "status"], endpoint="/api/tickets"),
-                ],
-            ),
-            UIPage(
-                route="/seat-selection",
-                title="Seat Selection",
-                roles=["user"],
-                layout="dashboard",
-                components=[UIComponent(id="seat_map_selector", type="table", entity="seats", fields=["section", "row", "number", "status"], endpoint="/api/seats")],
-            ),
-            UIPage(
-                route="/checkout",
-                title="Checkout",
-                roles=["user"],
-                layout="billing",
-                components=[UIComponent(id="ticket_checkout", type="button", entity="orders", fields=["amount", "status"], endpoint="/api/orders")],
-            ),
-            UIPage(
-                route="/account",
-                title="Account",
-                roles=["user"],
-                layout="dashboard",
-                components=[
-                    UIComponent(id="account_profile", type="form", entity="users", fields=["email"], endpoint="/api/users"),
-                    UIComponent(id="my_tickets", type="list", entity="tickets", fields=["event_id", "seat_id", "status"], endpoint="/api/tickets"),
-                ],
-            ),
+    pages = []
+    if "Login" in arch.pages:
+        pages.append(
             UIPage(
                 route="/login",
                 title="Login",
                 roles=["public"],
                 layout="auth",
                 components=[UIComponent(id="login_form", type="form", entity="users", fields=["email"], endpoint="/auth/login")],
-            ),
-        ]
+            )
+        )
+    if "Home" in arch.pages:
+        primary = next((entity for entity in arch.entities if entity != "users"), None)
+        primary_fields = [col.name for col in _entity_fields(primary) if col.name not in {"id", "created_at", "owner_id"}][:4] if primary else ["total_records"]
+        pages.append(
+            UIPage(
+                route="/",
+                title="Home",
+                roles=["public"],
+                layout="landing",
+                components=[
+                    UIComponent(id="hero_overview", type="stat", entity=primary, fields=primary_fields, endpoint=f"/api/{primary}" if primary else None),
+                    UIComponent(id="featured_items", type="list", entity=primary, fields=primary_fields, endpoint=f"/api/{primary}" if primary else None),
+                ],
+            )
+        )
+    if "Dashboard" in arch.pages:
+        pages.append(
+            UIPage(
+                route="/dashboard",
+                title="Dashboard",
+                roles=arch.roles,
+                layout="dashboard",
+                components=[
+                    UIComponent(id="summary_stats", type="stat", fields=["total_records", "active_users"]),
+                    UIComponent(id="main_nav", type="nav"),
+                ],
+            )
+        )
 
-    pages = [
-        UIPage(
-            route="/login",
-            title="Login",
-            roles=["public"],
-            layout="auth",
-            components=[UIComponent(id="login_form", type="form", entity="users", fields=["email"], endpoint="/auth/login")],
-        ),
-        UIPage(
-            route="/dashboard",
-            title="Dashboard",
-            roles=arch.roles,
-            layout="dashboard",
-            components=[
-                UIComponent(id="summary_stats", type="stat", fields=["total_records", "active_users"]),
-                UIComponent(id="main_nav", type="nav"),
-            ],
-        ),
-    ]
+    existing_routes = {page.route for page in pages}
+    page_entity_lookup = {entity.replace("_", " ").title(): entity for entity in arch.entities}
+    page_entity_lookup["Account"] = "users"
+    page_entity_lookup["Checkout"] = "orders" if "orders" in arch.entities else ("payments" if "payments" in arch.entities else None)
+    page_entity_lookup["Seat Selection"] = "seats" if "seats" in arch.entities else None
+
+    for page_name in arch.pages:
+        if page_name in {"Home", "Login", "Dashboard"}:
+            continue
+        entity = page_entity_lookup.get(page_name)
+        route = "/" + page_name.lower().replace(" ", "-")
+        if page_name in {"Checkout", "Billing"}:
+            layout = "billing"
+            component_type = "button"
+        elif page_name in {"Account", "Seat Selection"}:
+            layout = "dashboard"
+            component_type = "table" if page_name == "Seat Selection" else "form"
+        elif page_name == "Analytics":
+            layout = "analytics"
+            component_type = "chart"
+        else:
+            layout = "crud"
+            component_type = "list"
+        if route in existing_routes:
+            continue
+        fields = [col.name for col in _entity_fields(entity)] if entity else []
+        fields = [field for field in fields if field not in {"id", "created_at", "owner_id"}][:4]
+        pages.append(
+            UIPage(
+                route=route,
+                title=page_name,
+                roles=["public"] if page_name not in {"Checkout", "Account", "Seat Selection"} else arch.roles,
+                layout=layout,
+                components=[
+                    UIComponent(
+                        id=f"{page_name.lower().replace(' ', '_')}_primary",
+                        type=component_type,
+                        entity=entity,
+                        fields=fields,
+                        endpoint=f"/api/{entity}" if entity else None,
+                    )
+                ],
+            )
+        )
+        existing_routes.add(route)
+
     for entity in sorted(set(arch.entities)):
+        if entity == "users" or any(page.title == entity.replace("_", " ").title() for page in pages):
+            continue
         pages.append(
             UIPage(
                 route=f"/{entity}",

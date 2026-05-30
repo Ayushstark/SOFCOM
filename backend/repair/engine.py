@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+from backend.pipeline.stage1_intent import _derive_entities_from_prompt
 from backend.schemas import APIEndpoint, AppConfig, AuthRule, DBColumn, DBTable, FieldType, UIComponent, UIPage, ValidationIssue
 
 
@@ -231,29 +232,13 @@ def repair_config(config: AppConfig, issues: list[ValidationIssue]) -> AppConfig
                     ]
                 )
             )
-        elif issue.code == "V019":
-            fixed.intent.product_type = "event_booking"
-            fixed.architecture.product_type = "event_booking"
-            fixed.intent.features = sorted(set([*fixed.intent.features, "login", "responsive_design", "seat_selection", "ticket_purchase"]))
-            fixed.intent.entities = sorted(set(["events", "venues", "tickets", "seats", "orders", "users"]))
-            fixed.architecture.entities = fixed.intent.entities
-            fixed.architecture.pages = ["Home", "Events", "Event Details", "Seat Selection", "Checkout", "Account", "Login"]
-            fixed.architecture.flows = [
-                "Visitor browses concert event listings with date, venue, price, and availability.",
-                "User opens an event details page and selects available seats from a venue map.",
-                "User completes ticket checkout and receives an order linked to their account.",
-                "Authenticated users manage account details and view upcoming tickets.",
-            ]
-            fixed.business_logic = list(
-                dict.fromkeys(
-                    [
-                        *fixed.business_logic,
-                        "Ticket purchases create an order and reserve selected seats before checkout completes.",
-                        "A seat can be reserved by only one active order at a time.",
-                    ]
-                )
-            )
-            for entity in ["events", "venues", "tickets", "seats", "orders", "users"]:
+        elif issue.code == "V020":
+            prompt_entities = _derive_entities_from_prompt(fixed.intent.original_prompt.lower())
+            for entity in prompt_entities:
+                if entity not in fixed.intent.entities:
+                    fixed.intent.entities.append(entity)
+                if entity not in fixed.architecture.entities:
+                    fixed.architecture.entities.append(entity)
                 if entity not in table_names:
                     fixed.db_schema.append(
                         DBTable(
@@ -261,57 +246,42 @@ def repair_config(config: AppConfig, issues: list[ValidationIssue]) -> AppConfig
                             columns=[
                                 DBColumn(name="id", type=FieldType.string, unique=True),
                                 DBColumn(name="created_at", type=FieldType.datetime),
+                                DBColumn(name="owner_id", type=FieldType.string, references="users.id"),
                                 DBColumn(name="name", type=FieldType.string, required=False),
+                                DBColumn(name="description", type=FieldType.text, required=False),
                                 DBColumn(name="status", type=FieldType.string, required=False),
                             ],
                         )
                     )
                     table_names.add(entity)
-            for entity in ["events", "venues", "tickets", "seats", "orders"]:
                 path = f"/api/{entity}"
                 if path not in endpoint_paths:
                     fixed.api_schema.extend(
                         [
-                            APIEndpoint(path=path, method="GET", role_access=["user"], request_fields=[], response_entity=entity),
-                            APIEndpoint(path=path, method="POST", role_access=["user"], request_fields=["name", "status"], response_entity=entity),
+                            APIEndpoint(path=path, method="GET", role_access=fixed.architecture.roles or ["user"], request_fields=[], response_entity=entity),
+                            APIEndpoint(path=path, method="POST", role_access=fixed.architecture.roles or ["user"], request_fields=["name", "description", "status"], response_entity=entity),
                         ]
                     )
                     endpoint_paths.add(path)
-            required_pages = {
-                "/events": UIPage(
-                    route="/events",
-                    title="Events",
-                    roles=["public"],
-                    layout="crud",
-                    components=[UIComponent(id="event_listings", type="list", entity="events", fields=["name", "status"], endpoint="/api/events")],
-                ),
-                "/seat-selection": UIPage(
-                    route="/seat-selection",
-                    title="Seat Selection",
-                    roles=["user"],
-                    layout="dashboard",
-                    components=[UIComponent(id="seat_map_selector", type="table", entity="seats", fields=["name", "status"], endpoint="/api/seats")],
-                ),
-                "/checkout": UIPage(
-                    route="/checkout",
-                    title="Checkout",
-                    roles=["user"],
-                    layout="billing",
-                    components=[UIComponent(id="ticket_checkout", type="button", entity="orders", fields=["name", "status"], endpoint="/api/orders")],
-                ),
-                "/account": UIPage(
-                    route="/account",
-                    title="Account",
-                    roles=["user"],
-                    layout="dashboard",
-                    components=[UIComponent(id="my_tickets", type="list", entity="tickets", fields=["name", "status"], endpoint="/api/tickets")],
-                ),
-            }
-            existing_routes = {page.route for page in fixed.ui_schema}
-            for route, page in required_pages.items():
-                if route not in existing_routes:
-                    fixed.ui_schema.append(page)
-                    existing_routes.add(route)
+                title = entity.replace("_", " ").title()
+                if title not in fixed.architecture.pages:
+                    fixed.architecture.pages.append(title)
+                route = f"/{entity}"
+                if route not in {page.route for page in fixed.ui_schema}:
+                    fixed.ui_schema.append(
+                        UIPage(
+                            route=route,
+                            title=title,
+                            roles=fixed.architecture.roles or ["user"],
+                            layout="crud",
+                            components=[
+                                UIComponent(id=f"{entity}_list", type="list", entity=entity, fields=["name", "status"], endpoint=path),
+                                UIComponent(id=f"{entity}_form", type="form", entity=entity, fields=["name", "description", "status"], endpoint=path),
+                            ],
+                        )
+                    )
+            fixed.intent.entities = sorted(set(fixed.intent.entities))
+            fixed.architecture.entities = sorted(set(fixed.architecture.entities))
 
     fixed.validation_report = []
     return fixed

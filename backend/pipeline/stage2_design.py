@@ -40,31 +40,13 @@ Intent JSON:
             data["entities"] = intent.entities
             data["roles"] = intent.roles
             data["product_type"] = intent.product_type
-            if intent.product_type == "event_booking":
-                data["pages"] = ["Home", "Events", "Event Details", "Seat Selection", "Checkout", "Account", "Login"]
-                data["flows"] = [
-                    "Visitor browses concert event listings with date, venue, price, and availability.",
-                    "User opens an event details page and selects available seats from a venue map.",
-                    "User completes ticket checkout and receives an order linked to their account.",
-                    "Authenticated users manage account details and view upcoming tickets.",
-                ]
             return AppArchSpec(**data)
         except Exception:
             if llm.strict_llm:
                 raise
             pass  # Fallback
 
-    if intent.product_type == "event_booking":
-        pages = ["Home", "Events", "Event Details", "Seat Selection", "Checkout", "Account"]
-        if "login" in intent.features:
-            pages.append("Login")
-        flows = [
-            "Visitor browses concert event listings with date, venue, price, and availability.",
-            "User opens an event details page and selects available seats from a venue map.",
-            "User completes ticket checkout and receives an order linked to their account.",
-            "Authenticated users manage account details and view upcoming tickets.",
-        ]
-    elif intent.product_type == "template_unspecified":
+    if intent.product_type == "template_unspecified":
         pages = ["Home", "About", "Contact"]
         if "login" in intent.features:
             pages.append("Login")
@@ -84,21 +66,36 @@ Intent JSON:
             "Layout adapts between desktop and smart-fridge profiles.",
         ]
     else:
-        pages = ["Login", "Dashboard"]
+        pages = ["Home"]
+        if "login" in intent.features:
+            pages.append("Login")
+        if intent.product_type in {"crm", "ecommerce", "lms", "booking", "project"} or "dashboard" in intent.features:
+            pages.append("Dashboard")
         if "payments" in intent.features:
-            pages.append("Billing")
+            pages.append("Checkout")
+        if "ticket_purchase" in intent.features:
+            pages.append("Checkout")
+        if "seat_selection" in intent.features:
+            pages.append("Seat Selection")
+        if "users" in intent.entities or "login" in intent.features:
+            pages.append("Account")
         if "analytics" in intent.features:
             pages.append("Analytics")
         for entity in intent.entities:
             if entity != "users":
                 pages.append(entity.replace("_", " ").title())
+        pages = list(dict.fromkeys(pages))
 
         flows = [
-            "Visitor signs in and receives role-aware navigation.",
-            "Authenticated user reads and updates permitted business records.",
+            "Visitor opens the main experience and browses the primary domain content.",
+            "User interacts with the requested resources and completes the core workflow.",
         ]
-        if "payments" in intent.features:
-            flows.append("User upgrades plan; subscription status unlocks premium pages and API actions.")
+        if "login" in intent.features:
+            flows.append("User signs in and manages account-specific records.")
+        if "ticket_purchase" in intent.features or "payments" in intent.features:
+            flows.append("User completes checkout and receives an order record.")
+        if "seat_selection" in intent.features:
+            flows.append("User selects an available seat before purchase is finalized.")
         if "analytics" in intent.features:
             flows.append("Admin reviews analytics computed from core business tables.")
 
