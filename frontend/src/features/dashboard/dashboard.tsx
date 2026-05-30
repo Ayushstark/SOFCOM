@@ -122,16 +122,15 @@ export function Dashboard() {
     const entries = compile.data?.log ?? []
     return entries
       .flatMap((entry) => {
-        const base = [`[${entry.level}] ${entry.stage.toUpperCase()}  ${entry.message}`]
+        const lines = [`[${entry.level}] ${entry.stage.toUpperCase()}  ${entry.message}`]
         const details = entry.details
-        if (!details) return base
+        if (!details) return lines
 
-        const lines: string[] = []
         const errors = details.errors as Array<{ code?: string; message?: string; layer?: string }> | undefined
         const warnings = details.warnings as Array<{ code?: string; message?: string; layer?: string }> | undefined
-        const unresolved = details.unresolved as Array<{ code?: string; message?: string }> | undefined
         const fixed = details.fixed as string[] | undefined
         const remaining = details.remaining as string[] | undefined
+        const unresolved = details.unresolved as Array<{ code?: string; message?: string }> | undefined
 
         if (errors?.length) {
           lines.push(...errors.map((e) => `  -> ISSUE [${e.code ?? 'N/A'}] (${e.layer ?? 'unknown'}): ${e.message ?? 'unknown error'}`))
@@ -139,19 +138,12 @@ export function Dashboard() {
         if (warnings?.length) {
           lines.push(...warnings.map((w) => `  -> WARN  [${w.code ?? 'N/A'}] (${w.layer ?? 'unknown'}): ${w.message ?? 'unknown warning'}`))
         }
-        if (fixed?.length) {
-          lines.push(`  -> REPAIRED: ${fixed.join(', ')}`)
-        }
-        if (remaining?.length) {
-          lines.push(`  -> REMAINING: ${remaining.join(', ')}`)
-        }
+        if (fixed?.length) lines.push(`  -> REPAIRED: ${fixed.join(', ')}`)
+        if (remaining?.length) lines.push(`  -> REMAINING: ${remaining.join(', ')}`)
         if (unresolved?.length) {
           lines.push(...unresolved.map((u) => `  -> UNRESOLVED [${u.code ?? 'N/A'}]: ${u.message ?? 'unknown issue'}`))
         }
-        if (!lines.length) {
-          lines.push(`  -> DETAILS: ${JSON.stringify(details)}`)
-        }
-        return [...base, ...lines]
+        return lines
       })
       .join('\n')
   }, [compile.data?.log])
