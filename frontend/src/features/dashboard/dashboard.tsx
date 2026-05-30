@@ -47,7 +47,11 @@ type EvaluationResponse = {
 }
 
 const STAGES = ['intent', 'design', 'schema', 'repair', 'runtime', 'metrics'] as const
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+const RAW_API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+const API_BASE_URL = RAW_API_BASE_URL
+  || (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
+    ? 'https://sofcom-backend.vercel.app'
+    : 'http://127.0.0.1:8000')
 const TESTING_PROMPTS: Array<{ kind: 'product' | 'edge'; prompt: string }> = [
   { kind: 'product', prompt: 'Build a CRM with login, contacts, dashboard, role-based access, premium plan with payments. Admins can see analytics.' },
   { kind: 'product', prompt: 'Create an ecommerce store with products, orders, customers, checkout payments, and admin analytics.' },
@@ -85,11 +89,11 @@ export function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: inputPrompt }),
       })
-      if (!res.ok) throw new Error('Compiler request failed')
+      if (!res.ok) throw new Error(`Compile failed (${res.status}) via ${API_BASE_URL}/generate`)
       return (await res.json()) as CompileResponse
     },
     onSuccess: () => toast.success('Compilation complete'),
-    onError: () => toast.error('Compiler request failed. Is backend running on :8000?'),
+    onError: (error) => toast.error(error instanceof Error ? error.message : `Compiler request failed via ${API_BASE_URL}`),
   })
   const evaluation = useQuery({
     queryKey: ['evaluation'],
@@ -99,7 +103,7 @@ export function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       })
-      if (!res.ok) throw new Error('Evaluation failed')
+      if (!res.ok) throw new Error(`Evaluation failed (${res.status}) via ${API_BASE_URL}/evaluate`)
       return (await res.json()) as EvaluationResponse
     },
     staleTime: 60_000,
