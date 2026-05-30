@@ -23,6 +23,8 @@ class LLMClient:
         self.api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         self.model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
         self.strict_llm = os.getenv("STRICT_LLM", "true").strip().lower() in {"1", "true", "yes", "on"}
+        self.allow_fallback = os.getenv("ALLOW_DETERMINISTIC_FALLBACK", "false").strip().lower() in {"1", "true", "yes", "on"}
+        self.used_llm = False
         self.model_fallbacks = [
             model.strip()
             for model in os.getenv(
@@ -48,7 +50,11 @@ class LLMClient:
 
         payload: dict[str, Any] = {
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": temperature},
+            "generationConfig": {
+                "temperature": temperature,
+                "responseMimeType": "application/json",
+                "maxOutputTokens": 8192,
+            },
         }
         candidates_to_try = list(dict.fromkeys([self.model, *self.model_fallbacks]))
         last_error: Exception | None = None
@@ -66,6 +72,7 @@ class LLMClient:
                 try:
                     response.raise_for_status()
                     self.model = model
+                    self.used_llm = True
                     data = response.json()
                     break
                 except httpx.HTTPStatusError as exc:

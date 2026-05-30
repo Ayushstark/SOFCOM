@@ -85,12 +85,13 @@ For each table, provide the name and columns.
 JSON Schema: list of objects with 'name' (string) and 'columns' (list of objects with 'name', 'type' (string/number/boolean/datetime/email/money/text), 'required' (bool), 'unique' (bool), 'references' (string, optional)).
 
 Always include an 'id' string column for every table.
+Use fields that match the entity and prompt, not generic name/status only when better domain fields are obvious.
 """
         try:
             data = await llm.generate_json(sys_prompt, temperature=0.1)
             return [DBTable(**table) for table in data]
         except Exception:
-            if llm.strict_llm:
+            if llm.strict_llm or not llm.allow_fallback:
                 raise
             pass
 
@@ -107,12 +108,13 @@ Pages: {arch.pages}
 JSON Schema: list of objects with 'path', 'method' (GET/POST/PUT/PATCH/DELETE), 'role_access' (list of roles allowed), 'request_fields' (list of strings), 'response_entity' (string).
 
 Include CRUD endpoints for all entities and /auth/login.
+Endpoints must match the generated entities and workflow from the prompt.
 """
         try:
             data = await llm.generate_json(sys_prompt, temperature=0.1)
             return [APIEndpoint(**ep) for ep in data]
         except Exception:
-            if llm.strict_llm:
+            if llm.strict_llm or not llm.allow_fallback:
                 raise
             pass
 
@@ -139,12 +141,13 @@ Pages needed: {arch.pages}
 Roles: {arch.roles}
 Entities: {arch.entities}
 JSON Schema: list of objects with 'route', 'title', 'roles' (list), 'layout' (dashboard/crud/auth/billing/analytics), and 'components' (list of objects with 'id', 'type' (form/table/chart/stat/nav/button), 'entity' (optional), 'fields' (list), 'endpoint' (optional)).
+Use prompt-specific pages and components, not generic dashboard/CRUD pages unless requested.
 """
         try:
             data = await llm.generate_json(sys_prompt, temperature=0.1)
             return [UIPage(**page) for page in data]
         except Exception:
-            if llm.strict_llm:
+            if llm.strict_llm or not llm.allow_fallback:
                 raise
             pass
 
@@ -297,7 +300,7 @@ JSON Schema: list of objects with 'role' (string) and 'permissions' (list of str
             data = await llm.generate_json(sys_prompt, temperature=0.1)
             return [AuthRule(**rule) for rule in data]
         except Exception:
-            if llm.strict_llm:
+            if llm.strict_llm or not llm.allow_fallback:
                 raise
             pass
 

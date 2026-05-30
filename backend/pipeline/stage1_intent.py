@@ -167,6 +167,10 @@ Important rules:
 - If there are conflicting requirements: document the conflicts and how you resolved them as assumptions (e.g., "Assumed X instead of Y because...").
 - Do not force the prompt into CRM/ecommerce/booking templates unless the user clearly asks for that category.
 - Preserve domain resources directly named by the user (for example events, tickets, seats, courses, products, contacts).
+- For domain apps, infer resources from the user's exact nouns and workflows. Examples: food delivery should include restaurants, menus/menu_items, carts/orders, tracking, payments; portfolios should include public sections, work samples, testimonials, contact.
+- If the prompt asks for a public website or portfolio, do not add login/users unless explicitly requested.
+- If the prompt asks for mobile-first/responsive design, include responsive_design.
+- If the prompt asks for payments, include payments and orders/checkout resources as needed.
 - Always ensure valid JSON.
 - Include 'login' feature and 'users' entity if they aren't explicitly excluded but are reasonably needed.
 
@@ -210,7 +214,7 @@ Prompt to analyze:
                     ]
             return IntentGraph(**data)
         except Exception:
-            if llm.strict_llm:
+            if llm.strict_llm or not llm.allow_fallback:
                 raise
             pass  # Fallback to deterministic below
 

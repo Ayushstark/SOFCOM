@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -63,8 +64,14 @@ def home() -> FileResponse:
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok", "mode": llm_client.mode}
+def health() -> dict[str, str | bool]:
+    return {
+        "status": "ok",
+        "mode": llm_client.mode,
+        "model": llm_client.model,
+        "strict_llm": llm_client.strict_llm,
+        "allow_deterministic_fallback": llm_client.allow_fallback,
+    }
 
 
 @app.post("/generate")
@@ -74,7 +81,17 @@ async def generate(request: GenerateRequest) -> dict:
     Returns the config, a detailed log of every pipeline step, and metrics.
     Does NOT run the full evaluation dataset.
     """
-    config, log = await compile_cached(request.prompt, force_refresh=request.force_refresh)
+    try:
+        config, log = await compile_cached(request.prompt, force_refresh=request.force_refresh)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": "LLM generation failed. No deterministic fallback was used, so no fake/prewritten JSON was returned.",
+                "error": str(exc),
+                "hint": "Check GEMINI_API_KEY, GEMINI_MODEL, model access, quota, and Vercel Production env vars.",
+            },
+        ) from exc
     return {
         "config": config.as_json_dict(),
         "log": log,

@@ -34,6 +34,8 @@ Return exact JSON matching this schema:
 }}
 
 Keep the exact entities, roles, business_rules, and assumptions passed below. Expand on flows and pages.
+Do not substitute generic CRM, ecommerce, booking, or dashboard pages unless those concepts are requested.
+Use page names that reflect the prompt and entities. For example, a food delivery app should expose Restaurants, Menu, Cart, Checkout, Order Tracking, and Account when those concepts are present.
 Intent JSON:
 {intent.model_dump_json()}
 """
@@ -53,7 +55,7 @@ Intent JSON:
                 ]
             return AppArchSpec(**data)
         except Exception:
-            if llm.strict_llm:
+            if llm.strict_llm or not llm.allow_fallback:
                 raise
             pass  # Fallback
 

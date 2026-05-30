@@ -58,7 +58,13 @@ async def compile_prompt(prompt: str) -> tuple[AppConfig, list[dict[str, Any]]]:
     log.info(
         "intent",
         f"Extracting intent from prompt ({len(prompt)} chars)",
-        {"mode": mode, "strict_llm": llm.strict_llm, "provider": llm.provider, "model": llm.model},
+        {
+            "mode": mode,
+            "strict_llm": llm.strict_llm,
+            "allow_deterministic_fallback": llm.allow_fallback,
+            "provider": llm.provider,
+            "model": llm.model,
+        },
     )
     try:
         intent = await extract_intent(prompt, llm)
@@ -189,12 +195,13 @@ async def compile_prompt(prompt: str) -> tuple[AppConfig, list[dict[str, Any]]]:
 
     # ── Metrics ──────────────────────────────────────────────────────
     latency = round((time.perf_counter() - started) * 1000, 2)
+    actual_cost_mode = "llm-quality" if llm.used_llm else "deterministic-local"
     config.metrics = CompilerMetrics(
         latency_ms=latency,
         validation_passes=validation_passes,
         repair_passes=repair_passes,
         issue_count=len(config.validation_report),
-        cost_mode="llm-quality" if llm.mode == "gemini" else "deterministic-local",
+        cost_mode=actual_cost_mode,
     )
 
     log.info("metrics", f"Compilation complete in {latency}ms", {
@@ -203,6 +210,8 @@ async def compile_prompt(prompt: str) -> tuple[AppConfig, list[dict[str, Any]]]:
         "repair_passes": repair_passes,
         "issue_count": len(config.validation_report),
         "cost_mode": config.metrics.cost_mode,
+        "llm_used": llm.used_llm,
+        "final_model": llm.model,
         "success": config.runtime.executable if config.runtime else False,
     })
 
