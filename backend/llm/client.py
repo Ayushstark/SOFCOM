@@ -22,6 +22,7 @@ class LLMClient:
         self.provider = os.getenv("LLM_PROVIDER", "deterministic-local").lower()
         self.api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         self.model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        self.api_version = os.getenv("GEMINI_API_VERSION", "v1beta")
         self.strict_llm = os.getenv("STRICT_LLM", "true").strip().lower() in {"1", "true", "yes", "on"}
         self.allow_fallback = os.getenv("ALLOW_DETERMINISTIC_FALLBACK", "false").strip().lower() in {"1", "true", "yes", "on"}
         self.used_llm = False
@@ -33,6 +34,7 @@ class LLMClient:
             ).split(",")
             if model.strip()
         ]
+        self._discovered_models: list[str] | None = None
 
     @property
     def mode(self) -> str:
@@ -42,6 +44,44 @@ class LLMClient:
 
     def is_configured(self) -> bool:
         return self.mode == "gemini"
+
+    def _url(self, path: str) -> str:
+        return f"https://generativelanguage.googleapis.com/{self.api_version}/{path.lstrip('/')}"
+
+    @staticmethod
+    def _redact_error(error: Exception) -> str:
+        return re.sub(r"key=[^&\s]+", "key=REDACTED", str(error))
+
+    async def _discover_generate_content_models(self, client: httpx.AsyncClient) -> list[str]:
+        if self._discovered_models is not None:
+            return self._discovered_models
+
+        response = await client.get(self._url("models"), params={"key": self.api_key})
+        response.raise_for_status()
+        payload = response.json()
+        models: list[str] = []
+        for model in payload.get("models", []):
+            name = str(model.get("name", "")).replace("models/", "")
+            methods = set(model.get("supportedGenerationMethods") or [])
+            if name and "generateContent" in methods:
+                models.append(name)
+
+        def score(model_name: str) -> tuple[int, str]:
+            lowered = model_name.lower()
+            if "2.5" in lowered and "flash" in lowered:
+                return (0, model_name)
+            if "2.0" in lowered and "flash" in lowered:
+                return (1, model_name)
+            if "1.5" in lowered and "flash" in lowered:
+                return (2, model_name)
+            if "flash" in lowered:
+                return (3, model_name)
+            if "pro" in lowered:
+                return (4, model_name)
+            return (5, model_name)
+
+        self._discovered_models = sorted(dict.fromkeys(models), key=score)
+        return self._discovered_models
 
     # ── raw text generation ──────────────────────────────────────────
     async def generate_text(self, prompt: str, *, temperature: float = 0.0) -> str:
@@ -56,13 +96,22 @@ class LLMClient:
                 "maxOutputTokens": 8192,
             },
         }
-        candidates_to_try = list(dict.fromkeys([self.model, *self.model_fallbacks]))
         last_error: Exception | None = None
         async with httpx.AsyncClient(timeout=45) as client:
+            try:
+                discovered_models = await self._discover_generate_content_models(client)
+            except httpx.HTTPStatusError as exc:
+                discovered_models = []
+                last_error = exc
+
+            candidates_to_try = list(dict.fromkeys([self.model, *self.model_fallbacks, *discovered_models]))
+            if not candidates_to_try:
+                raise RuntimeError("Gemini model discovery returned no generateContent-capable models.")
+
             for model in candidates_to_try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+                url = self._url(f"models/{model}:generateContent")
                 response = await client.post(url, params={"key": self.api_key}, json=payload)
-                if response.status_code == 404 and model != candidates_to_try[-1]:
+                if response.status_code == 404:
                     last_error = httpx.HTTPStatusError(
                         f"Gemini model {model} was not found; trying fallback model.",
                         request=response.request,
@@ -78,7 +127,8 @@ class LLMClient:
                 except httpx.HTTPStatusError as exc:
                     last_error = exc
             else:
-                raise RuntimeError(f"Gemini request failed for all configured models: {last_error}") from last_error
+                safe_error = self._redact_error(last_error) if last_error else "unknown error"
+                raise RuntimeError(f"Gemini request failed for all discovered/configured models: {safe_error}") from last_error
 
         candidates = data.get("candidates", [])
         if not candidates:
