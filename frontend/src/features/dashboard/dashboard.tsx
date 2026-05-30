@@ -78,6 +78,7 @@ const TESTING_PROMPTS: Array<{ kind: 'product' | 'edge'; prompt: string }> = [
 export function Dashboard() {
   const { sidebarCollapsed, toggleSidebar, commandOpen, setCommandOpen, activeTab, setActiveTab } = useUiStore()
   const [prompt, setPrompt] = useState('')
+  const [userPromptHistory, setUserPromptHistory] = useState<string[]>([])
   const [view, setView] = useState<'json' | 'yaml' | 'diff'>('json')
   const [compileHistory, setCompileHistory] = useState<CompileHistoryRow[]>([])
   const [previousConfig, setPreviousConfig] = useState<CompileResponse['config'] | null>(null)
@@ -130,6 +131,7 @@ export function Dashboard() {
     }
     compile.mutate(finalPrompt, {
       onSuccess: (data) => {
+        setUserPromptHistory((rows) => [finalPrompt, ...rows.filter((p) => p !== finalPrompt)].slice(0, 20))
         const prev = compile.data?.config
         if (prev) setPreviousConfig(prev)
         const errors = data.config.validation_report.filter((x) => x.severity === 'error')
@@ -197,7 +199,15 @@ export function Dashboard() {
             <>
               <section className="space-y-4 xl:col-span-2">
                 <Hero appName={compile.data?.config.app_name} />
-                <PromptCenter prompt={prompt} setPrompt={setPrompt} tokenCount={tokenCount} onTemplate={setPrompt} onGenerate={runCompile} loading={compile.isPending} />
+                <PromptCenter
+                  prompt={prompt}
+                  setPrompt={setPrompt}
+                  tokenCount={tokenCount}
+                  onTemplate={setPrompt}
+                  onGenerate={runCompile}
+                  loading={compile.isPending}
+                  userPromptHistory={userPromptHistory}
+                />
                 <Pipeline stages={stageState} />
                 <ConfigEditor view={view} setView={setView} config={compile.data?.config} previousConfig={previousConfig} />
               </section>
@@ -284,8 +294,100 @@ function Hero({ appName }: { appName?: string }) {
   return <Panel><p className="text-xs uppercase tracking-[0.2em] text-cyan-300">Live Compilation</p><h1 className="mt-2 text-2xl font-semibold">{appName ?? 'AI software generation in cinematic real-time'}</h1><p className="mt-2 text-sm text-text-secondary">Pipeline output is now connected to the backend and validated before runtime simulation.</p></Panel>
 }
 
-function PromptCenter({ prompt, setPrompt, tokenCount, onTemplate, onGenerate, loading }: { prompt: string; setPrompt: (v: string) => void; tokenCount: number; onTemplate: (t: string) => void; onGenerate: () => void; loading: boolean }) {
-  return <Panel><div className="mb-3 flex items-center justify-between"><div className="flex items-center gap-2"><Bot className="h-4 w-4 text-purple-300" /><p className="text-sm font-semibold">AI Command Center</p></div><p className="text-xs text-text-secondary">{tokenCount} tokens</p></div><textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the software you want to compile..." className="min-h-28 w-full resize-y rounded-xl border border-white/10 bg-black/30 p-3 text-sm outline-none ring-purple-300/0 transition focus:ring-2" /><div className="mt-3 flex flex-wrap gap-2">{templates.map((template) => <button key={template} onClick={() => onTemplate(template)} className="rounded-xl border border-cyan-300/20 bg-cyan-400/10 px-3 py-1.5 text-xs text-cyan-100">{template.slice(0, 48)}...</button>)}</div><div className="mt-3 flex flex-wrap items-center justify-between gap-2"><div className="flex gap-2 text-xs text-text-secondary"><span>/generate</span><span>/refine</span><span>/deploy</span></div><div className="flex gap-2"><button className="icon-btn"><Upload className="h-4 w-4" /></button><button disabled={loading || prompt.trim().length < 3} onClick={onGenerate} className="glow-btn disabled:opacity-60"><Play className="h-4 w-4" />{loading ? 'Compiling...' : 'Generate'}</button></div></div></Panel>
+function PromptCenter({
+  prompt,
+  setPrompt,
+  tokenCount,
+  onTemplate,
+  onGenerate,
+  loading,
+  userPromptHistory,
+}: {
+  prompt: string
+  setPrompt: (v: string) => void
+  tokenCount: number
+  onTemplate: (t: string) => void
+  onGenerate: () => void
+  loading: boolean
+  userPromptHistory: string[]
+}) {
+  const [historyOpen, setHistoryOpen] = useState(false)
+
+  return (
+    <Panel>
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Bot className="h-4 w-4 text-purple-300" />
+          <p className="text-sm font-semibold">AI Command Center</p>
+        </div>
+        <p className="text-xs text-text-secondary">{tokenCount} tokens</p>
+      </div>
+
+      <textarea
+        value={prompt}
+        onChange={(e) => setPrompt(e.target.value)}
+        placeholder="Describe the software you want to compile..."
+        className="min-h-28 w-full resize-y rounded-xl border border-white/10 bg-black/30 p-3 text-sm outline-none ring-purple-300/0 transition focus:ring-2"
+      />
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {templates.map((template) => (
+          <button
+            key={template}
+            onClick={() => onTemplate(template)}
+            className="rounded-xl border border-cyan-300/20 bg-cyan-400/10 px-3 py-1.5 text-xs text-cyan-100"
+          >
+            {template.slice(0, 48)}...
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-2 text-xs text-text-secondary">
+          <span>/generate</span>
+          <span>/refine</span>
+          <span>/deploy</span>
+        </div>
+        <div className="relative flex gap-2">
+          <button
+            onClick={() => setHistoryOpen((v) => !v)}
+            className="icon-btn"
+            title="Prompt History"
+          >
+            <Upload className="h-4 w-4" />
+          </button>
+          <button
+            disabled={loading || prompt.trim().length < 3}
+            onClick={onGenerate}
+            className="glow-btn disabled:opacity-60"
+          >
+            <Play className="h-4 w-4" />
+            {loading ? 'Compiling...' : 'Generate'}
+          </button>
+          {historyOpen && (
+            <div className="absolute right-0 top-11 z-20 w-80 rounded-xl border border-white/10 bg-[#0b1220] p-2 shadow-card">
+              {userPromptHistory.length === 0 ? (
+                <p className="px-2 py-1 text-xs text-text-secondary">No user prompt history yet.</p>
+              ) : (
+                userPromptHistory.map((item, idx) => (
+                  <button
+                    key={`${idx}-${item}`}
+                    onClick={() => {
+                      setPrompt(item)
+                      setHistoryOpen(false)
+                    }}
+                    className="block w-full truncate rounded-lg px-2 py-1.5 text-left text-xs hover:bg-white/5"
+                  >
+                    {item}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </Panel>
+  )
 }
 
 function Pipeline({ stages }: { stages: Array<{ name: string; status: 'active' | 'success' | 'error' }> }) {
