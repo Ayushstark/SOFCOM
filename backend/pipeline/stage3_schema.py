@@ -19,6 +19,36 @@ def _entity_fields(entity: str) -> list[DBColumn]:
         ]
     if entity in {"payments", "orders"}:
         return base + [DBColumn(name="amount", type=FieldType.money), DBColumn(name="status", type=FieldType.string)]
+    if entity == "events":
+        return base + [
+            DBColumn(name="title", type=FieldType.string),
+            DBColumn(name="venue_id", type=FieldType.string, references="venues.id"),
+            DBColumn(name="starts_at", type=FieldType.datetime),
+            DBColumn(name="description", type=FieldType.text, required=False),
+            DBColumn(name="status", type=FieldType.string),
+        ]
+    if entity == "venues":
+        return base + [
+            DBColumn(name="name", type=FieldType.string),
+            DBColumn(name="address", type=FieldType.text, required=False),
+            DBColumn(name="seat_map", type=FieldType.text, required=False),
+        ]
+    if entity == "seats":
+        return base + [
+            DBColumn(name="venue_id", type=FieldType.string, references="venues.id"),
+            DBColumn(name="section", type=FieldType.string),
+            DBColumn(name="row", type=FieldType.string),
+            DBColumn(name="number", type=FieldType.string),
+            DBColumn(name="status", type=FieldType.string),
+        ]
+    if entity == "tickets":
+        return base + [
+            DBColumn(name="event_id", type=FieldType.string, references="events.id"),
+            DBColumn(name="seat_id", type=FieldType.string, references="seats.id"),
+            DBColumn(name="order_id", type=FieldType.string, references="orders.id"),
+            DBColumn(name="price", type=FieldType.money),
+            DBColumn(name="status", type=FieldType.string),
+        ]
     if entity in {"analytics", "reports"}:
         return base + [DBColumn(name="metric_name", type=FieldType.string), DBColumn(name="value", type=FieldType.number)]
     return base + [
@@ -29,7 +59,7 @@ def _entity_fields(entity: str) -> list[DBColumn]:
 
 
 async def generate_db_schema(arch: AppArchSpec, llm: LLMClient) -> list[DBTable]:
-    if llm.is_configured():
+    if llm.is_configured() and arch.product_type != "event_booking":
         sys_prompt = f"""You are a Database Architect. Generate the database schema for: {arch.app_name}.
 Entities to include: {['users', *arch.entities]}
 For each table, provide the name and columns.
@@ -50,7 +80,7 @@ Always include an 'id' string column for every table.
 
 
 async def generate_api_schema(arch: AppArchSpec, llm: LLMClient) -> list[APIEndpoint]:
-    if llm.is_configured():
+    if llm.is_configured() and arch.product_type != "event_booking":
         sys_prompt = f"""You are an API Architect. Generate the API schema for: {arch.app_name}.
 Entities: {arch.entities}
 Roles: {arch.roles}
@@ -84,7 +114,7 @@ Include CRUD endpoints for all entities and /auth/login.
 
 
 async def generate_ui_schema(arch: AppArchSpec, llm: LLMClient) -> list[UIPage]:
-    if llm.is_configured():
+    if llm.is_configured() and arch.product_type != "event_booking":
         sys_prompt = f"""You are a Frontend Architect. Generate the UI schema for: {arch.app_name}.
 Pages needed: {arch.pages}
 Roles: {arch.roles}
@@ -98,6 +128,68 @@ JSON Schema: list of objects with 'route', 'title', 'roles' (list), 'layout' (da
             if llm.strict_llm:
                 raise
             pass
+
+    if arch.product_type == "event_booking":
+        return [
+            UIPage(
+                route="/",
+                title="Home",
+                roles=["public"],
+                layout="landing",
+                components=[
+                    UIComponent(id="hero_event_search", type="form", entity="events", fields=["title", "starts_at"], endpoint="/api/events"),
+                    UIComponent(id="featured_events", type="list", entity="events", fields=["title", "starts_at", "status"], endpoint="/api/events"),
+                ],
+            ),
+            UIPage(
+                route="/events",
+                title="Events",
+                roles=["public"],
+                layout="crud",
+                components=[UIComponent(id="event_listings", type="list", entity="events", fields=["title", "starts_at", "status"], endpoint="/api/events")],
+            ),
+            UIPage(
+                route="/events/:id",
+                title="Event Details",
+                roles=["public"],
+                layout="landing",
+                components=[
+                    UIComponent(id="event_detail", type="stat", entity="events", fields=["title", "starts_at", "description"], endpoint="/api/events"),
+                    UIComponent(id="ticket_options", type="list", entity="tickets", fields=["price", "status"], endpoint="/api/tickets"),
+                ],
+            ),
+            UIPage(
+                route="/seat-selection",
+                title="Seat Selection",
+                roles=["user"],
+                layout="dashboard",
+                components=[UIComponent(id="seat_map_selector", type="table", entity="seats", fields=["section", "row", "number", "status"], endpoint="/api/seats")],
+            ),
+            UIPage(
+                route="/checkout",
+                title="Checkout",
+                roles=["user"],
+                layout="billing",
+                components=[UIComponent(id="ticket_checkout", type="button", entity="orders", fields=["amount", "status"], endpoint="/api/orders")],
+            ),
+            UIPage(
+                route="/account",
+                title="Account",
+                roles=["user"],
+                layout="dashboard",
+                components=[
+                    UIComponent(id="account_profile", type="form", entity="users", fields=["email"], endpoint="/api/users"),
+                    UIComponent(id="my_tickets", type="list", entity="tickets", fields=["event_id", "seat_id", "status"], endpoint="/api/tickets"),
+                ],
+            ),
+            UIPage(
+                route="/login",
+                title="Login",
+                roles=["public"],
+                layout="auth",
+                components=[UIComponent(id="login_form", type="form", entity="users", fields=["email"], endpoint="/auth/login")],
+            ),
+        ]
 
     pages = [
         UIPage(

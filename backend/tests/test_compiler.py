@@ -50,3 +50,16 @@ async def test_template_prompt_with_placeholders_stays_domain_neutral_and_asks_q
     assert config.intent.ambiguity_score >= 0.7
     assert config.intent.clarification_questions
     assert not [issue for issue in config.validation_report if issue.code in {"V016", "V017", "V018"}]
+
+
+@pytest.mark.anyio
+async def test_concert_event_booking_prompt_uses_event_ticket_seat_model():
+    config, _ = await compile_prompt(
+        "Design a responsive event booking website for concerts, with event listings, "
+        "ticket purchase, seat selection, and user accounts. Use vibrant colors and bold typography."
+    )
+
+    assert config.intent.product_type == "event_booking"
+    assert {"events", "tickets", "seats", "orders", "users"}.issubset({table.name for table in config.db_schema})
+    assert {"/events", "/seat-selection", "/checkout", "/account"}.issubset({page.route for page in config.ui_schema})
+    assert not [issue for issue in config.validation_report if issue.code == "V019"]

@@ -40,13 +40,31 @@ Intent JSON:
             data["entities"] = intent.entities
             data["roles"] = intent.roles
             data["product_type"] = intent.product_type
+            if intent.product_type == "event_booking":
+                data["pages"] = ["Home", "Events", "Event Details", "Seat Selection", "Checkout", "Account", "Login"]
+                data["flows"] = [
+                    "Visitor browses concert event listings with date, venue, price, and availability.",
+                    "User opens an event details page and selects available seats from a venue map.",
+                    "User completes ticket checkout and receives an order linked to their account.",
+                    "Authenticated users manage account details and view upcoming tickets.",
+                ]
             return AppArchSpec(**data)
         except Exception:
             if llm.strict_llm:
                 raise
             pass  # Fallback
 
-    if intent.product_type == "template_unspecified":
+    if intent.product_type == "event_booking":
+        pages = ["Home", "Events", "Event Details", "Seat Selection", "Checkout", "Account"]
+        if "login" in intent.features:
+            pages.append("Login")
+        flows = [
+            "Visitor browses concert event listings with date, venue, price, and availability.",
+            "User opens an event details page and selects available seats from a venue map.",
+            "User completes ticket checkout and receives an order linked to their account.",
+            "Authenticated users manage account details and view upcoming tickets.",
+        ]
+    elif intent.product_type == "template_unspecified":
         pages = ["Home", "About", "Contact"]
         if "login" in intent.features:
             pages.append("Login")

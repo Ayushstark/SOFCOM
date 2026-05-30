@@ -143,4 +143,21 @@ def validate_config(config: AppConfig) -> list[ValidationIssue]:
                 )
             )
 
+    event_prompt = any(term in prompt_text for term in ["concert", "event listings", "ticket purchase", "seat selection"])
+    if event_prompt:
+        required_event_entities = {"events", "tickets", "seats", "orders", "users"}
+        missing_event_entities = sorted(required_event_entities - table_names)
+        required_event_routes = {"/events", "/seat-selection", "/checkout", "/account"}
+        existing_routes = {page.route for page in config.ui_schema}
+        missing_event_routes = sorted(required_event_routes - existing_routes)
+        if config.architecture.product_type != "event_booking" or missing_event_entities or missing_event_routes:
+            issues.append(
+                _issue(
+                    "V019",
+                    "logic",
+                    "Concert/event booking prompt is missing event-specific entities or pages.",
+                    "architecture",
+                )
+            )
+
     return issues

@@ -21,8 +21,16 @@ class LLMClient:
     def __init__(self) -> None:
         self.provider = os.getenv("LLM_PROVIDER", "deterministic-local").lower()
         self.api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-        self.model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+        self.model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
         self.strict_llm = os.getenv("STRICT_LLM", "true").strip().lower() in {"1", "true", "yes", "on"}
+        self.model_fallbacks = [
+            model.strip()
+            for model in os.getenv(
+                "GEMINI_MODEL_FALLBACKS",
+                "gemini-2.0-flash,gemini-1.5-flash-latest,gemini-1.5-flash",
+            ).split(",")
+            if model.strip()
+        ]
 
     @property
     def mode(self) -> str:
@@ -38,15 +46,32 @@ class LLMClient:
         if not self.is_configured():
             raise RuntimeError("Gemini is not configured. Set GEMINI_API_KEY in .env.")
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent"
         payload: dict[str, Any] = {
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": temperature},
         }
+        candidates_to_try = list(dict.fromkeys([self.model, *self.model_fallbacks]))
+        last_error: Exception | None = None
         async with httpx.AsyncClient(timeout=45) as client:
-            response = await client.post(url, params={"key": self.api_key}, json=payload)
-            response.raise_for_status()
-            data = response.json()
+            for model in candidates_to_try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+                response = await client.post(url, params={"key": self.api_key}, json=payload)
+                if response.status_code == 404 and model != candidates_to_try[-1]:
+                    last_error = httpx.HTTPStatusError(
+                        f"Gemini model {model} was not found; trying fallback model.",
+                        request=response.request,
+                        response=response,
+                    )
+                    continue
+                try:
+                    response.raise_for_status()
+                    self.model = model
+                    data = response.json()
+                    break
+                except httpx.HTTPStatusError as exc:
+                    last_error = exc
+            else:
+                raise RuntimeError(f"Gemini request failed for all configured models: {last_error}") from last_error
 
         candidates = data.get("candidates", [])
         if not candidates:

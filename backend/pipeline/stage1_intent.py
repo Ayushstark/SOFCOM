@@ -10,6 +10,9 @@ FEATURE_KEYWORDS = {
     "login": ["login", "auth", "authentication", "sign in"],
     "dashboard": ["dashboard", "overview", "home"],
     "payments": ["payment", "stripe", "subscription", "premium", "billing", "plan"],
+    "ticket_purchase": ["ticket", "tickets", "purchase", "checkout"],
+    "seat_selection": ["seat", "seats", "seat selection", "venue map"],
+    "responsive_design": ["responsive", "mobile", "desktop"],
     "analytics": ["analytics", "report", "metrics", "chart"],
     "role_based_access": ["role", "admin", "permission", "rbac"],
     "notifications": ["notification", "email", "reminder"],
@@ -26,6 +29,7 @@ ENTITY_HINTS = {
     "ecommerce": ["products", "orders", "customers", "payments"],
     "lms": ["courses", "lessons", "students", "enrollments"],
     "booking": ["appointments", "customers", "staff", "services"],
+    "event_booking": ["events", "venues", "tickets", "seats", "orders", "users"],
     "project": ["projects", "tasks", "teams", "comments"],
     "creative_experience": ["scenes", "assets", "interactions", "chatbot_sessions", "device_profiles"],
     "default": ["users", "items"],
@@ -52,12 +56,15 @@ async def extract_intent(prompt: str, llm: LLMClient) -> IntentGraph:
             "Do you want authentication and payments enabled in the first release?",
         ]
 
+    def _is_event_booking_prompt(text: str) -> bool:
+        return _contains_any(text, ["concert", "event booking", "event listings", "ticket", "seat selection", "venue"])
+
     if llm.is_configured():
         sys_prompt = f"""You are an expert software architect analyzing a product prompt.
 Parse the user's intent into a structured JSON configuration matching this exact schema:
 {{
   "original_prompt": "{clean}",
-  "product_type": "string (e.g. crm, ecommerce, lms, booking, project, default)",
+  "product_type": "string (e.g. crm, ecommerce, lms, booking, event_booking, project, creative_experience, default)",
   "features": ["list of strings (e.g. login, dashboard, payments)"],
   "entities": ["list of strings (plural nouns for core resources like users, contacts)"],
   "roles": ["list of strings (e.g. user, admin)"],
@@ -98,6 +105,21 @@ Prompt to analyze:
                 data["features"] = explicit_features
                 existing_questions = data.get("clarification_questions") or []
                 data["clarification_questions"] = list(dict.fromkeys([*existing_questions, *_template_questions()]))
+            elif _is_event_booking_prompt(lower):
+                data["product_type"] = "event_booking"
+                event_features = ["login", "responsive_design", "seat_selection", "ticket_purchase"]
+                data["features"] = sorted(set([*(data.get("features") or []), *event_features]))
+                data["entities"] = sorted(set(["events", "venues", "tickets", "seats", "orders", "users"]))
+                rules = data.get("business_rules") or []
+                data["business_rules"] = list(
+                    dict.fromkeys(
+                        [
+                            *rules,
+                            "Ticket purchases create an order and reserve selected seats before checkout completes.",
+                            "A seat can be reserved by only one active order at a time.",
+                        ]
+                    )
+                )
             return IntentGraph(**data)
         except Exception:
             if llm.strict_llm:
@@ -108,6 +130,8 @@ Prompt to analyze:
 
     if placeholder_tokens:
         product_type = "template_unspecified"
+    elif _is_event_booking_prompt(lower):
+        product_type = "event_booking"
     elif _contains_any(lower, ["galaxy", "croissant", "meow", "rocket", "smart fridge", "riddle", "3d", "space exploration", "dating app for plants"]):
         product_type = "creative_experience"
     elif _contains_any(lower, ["crm", "contact", "deal"]):
@@ -116,6 +140,8 @@ Prompt to analyze:
         product_type = "ecommerce"
     elif _contains_any(lower, ["course", "lesson", "student", "learn"]):
         product_type = "lms"
+    elif _contains_any(lower, ["concert", "event booking", "event listings", "ticket", "seat selection", "venue"]):
+        product_type = "event_booking"
     elif _contains_any(lower, ["appointment", "booking", "clinic", "schedule"]):
         product_type = "booking"
     elif _contains_any(lower, ["project", "task", "kanban"]):
@@ -130,13 +156,18 @@ Prompt to analyze:
         roles.append("premium_user")
 
     entities = list(ENTITY_HINTS[product_type])
-    explicit_nouns = re.findall(r"\b(?:contacts?|dashboards?|payments?|plans?|analytics?|roles?|users?)\b", lower)
+    explicit_nouns = re.findall(r"\b(?:contacts?|dashboards?|payments?|plans?|analytics?|roles?|users?|events?|tickets?|seats?|venues?|orders?)\b", lower)
     entities.extend(noun.rstrip("s") + "s" for noun in explicit_nouns if noun not in entities)
     entities = sorted(set(entities))
 
     business_rules = []
-    if "payments" in features:
-        business_rules.append("Premium features require an active subscription before access is granted.")
+    if "payments" in features or "ticket_purchase" in features:
+        if product_type == "event_booking":
+            business_rules.append("Ticket purchases create an order and reserve selected seats before checkout completes.")
+        else:
+            business_rules.append("Premium features require an active subscription before access is granted.")
+    if "seat_selection" in features:
+        business_rules.append("A seat can be reserved by only one active order at a time.")
     if "role_based_access" in features:
         business_rules.append("Admins can manage workspace data; users can only manage their own records.")
     if "analytics" in features:
@@ -155,6 +186,10 @@ Prompt to analyze:
     if product_type == "creative_experience":
         assumptions.append("Interpreted mixed creative requirements as an interactive experience website instead of a business CRUD app.")
         ambiguity_score = max(ambiguity_score, 0.45)
+    if product_type == "event_booking":
+        for feature in ["ticket_purchase", "seat_selection", "responsive_design"]:
+            if feature not in features:
+                features.append(feature)
     if "login" not in features and product_type != "creative_experience":
         assumptions.append("Included email/password login because most generated business apps need authentication.")
         features.append("login")
