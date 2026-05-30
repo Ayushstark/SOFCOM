@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import re
 
+from backend.pipeline.stage1_intent import derive_sections_from_prompt
 from backend.schemas import AppArchSpec, IntentGraph
 from backend.llm.client import LLMClient
 
 
 def _title_from_prompt(prompt: str, product_type: str) -> str:
+    if "portfolio" in prompt.lower():
+        return "Graphic Designer Portfolio" if "graphic designer" in prompt.lower() else "Portfolio Website"
     match = re.search(r"build\s+(?:a|an)?\s*([a-zA-Z ]{3,32}?)(?:\s+with|\s+for|$)", prompt, re.I)
     if match:
         title = match.group(1).strip()
@@ -40,6 +43,14 @@ Intent JSON:
             data["entities"] = intent.entities
             data["roles"] = intent.roles
             data["product_type"] = intent.product_type
+            if intent.product_type in {"portfolio_site", "website"}:
+                sections = derive_sections_from_prompt(intent.original_prompt.lower())
+                data["pages"] = list(dict.fromkeys(["Home", *sections]))
+                data["flows"] = [
+                    "Visitor lands on the homepage and understands the creator, offer, or brand.",
+                    "Visitor browses requested content sections from the original prompt.",
+                    "Visitor uses the contact section to start an inquiry.",
+                ]
             return AppArchSpec(**data)
         except Exception:
             if llm.strict_llm:
@@ -57,6 +68,15 @@ Intent JSON:
             "User navigates core informational sections while pending requirements are represented as configurable modules.",
             "System waits for clarified niche and feature priorities before final domain schema lock-in.",
         ]
+    elif intent.product_type in {"portfolio_site", "website"}:
+        sections = derive_sections_from_prompt(intent.original_prompt.lower())
+        pages = list(dict.fromkeys(["Home", *sections]))
+        flows = [
+            "Visitor lands on the homepage and understands the creator, offer, or brand.",
+            "Visitor browses requested content sections from the original prompt.",
+        ]
+        if "Contact" in pages:
+            flows.append("Visitor uses the contact section to start an inquiry.")
     elif intent.product_type == "creative_experience":
         pages = ["Home Experience", "Interactive Audio", "Riddle Chatbot", "Device Layout Profiles"]
         flows = [

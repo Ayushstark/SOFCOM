@@ -62,3 +62,17 @@ async def test_prompt_grounding_uses_resources_named_by_user():
     assert {"events", "tickets", "seats", "orders", "users"}.issubset({table.name for table in config.db_schema})
     assert {"ticket_purchase", "seat_selection", "responsive_design"}.issubset(set(config.intent.features))
     assert {"/events", "/seat-selection", "/checkout", "/account"}.issubset({page.route for page in config.ui_schema})
+
+
+@pytest.mark.anyio
+async def test_portfolio_prompt_preserves_public_sections_without_crm_login():
+    config, _ = await compile_prompt(
+        "Create a sleek, responsive portfolio website for a graphic designer, with sections for "
+        "About, Work Samples, Testimonials, and Contact. Use a minimal black-and-white theme with subtle animations."
+    )
+
+    assert config.intent.product_type == "portfolio_site"
+    assert config.intent.roles == ["public"]
+    assert "login" not in config.intent.features
+    assert {"Home", "About", "Work Samples", "Testimonials", "Contact"}.issubset(set(config.architecture.pages))
+    assert {"/about", "/work-samples", "/testimonials", "/contact"}.issubset({page.route for page in config.ui_schema})

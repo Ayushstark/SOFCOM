@@ -22,6 +22,8 @@ FEATURE_KEYWORDS = {
     "audio": ["sound", "audio", "meow", "rocket"],
     "animated_experience": ["animation", "animated", "floating", "galaxy", "space", "game"],
     "fridge_layout": ["smart fridge", "fridge", "kiosk"],
+    "portfolio_showcase": ["portfolio", "work samples", "case studies", "testimonials"],
+    "contact_capture": ["contact form", "contact section", "contact page"],
 }
 
 ENTITY_HINTS = {
@@ -43,8 +45,8 @@ RESOURCE_TERMS = {
     "checkout": "orders",
     "concert": "events",
     "concerts": "events",
-    "contact": "contacts",
-    "contacts": "contacts",
+    "contact form": "contact_messages",
+    "contact page": "contact_messages",
     "course": "courses",
     "courses": "courses",
     "customer": "customers",
@@ -73,6 +75,28 @@ RESOURCE_TERMS = {
     "tickets": "tickets",
     "venue": "venues",
     "venues": "venues",
+    "testimonial": "testimonials",
+    "testimonials": "testimonials",
+    "work sample": "work_samples",
+    "work samples": "work_samples",
+    "portfolio": "projects",
+}
+
+SECTION_TERMS = {
+    "about": "About",
+    "work": "Work",
+    "work sample": "Work Samples",
+    "work samples": "Work Samples",
+    "portfolio": "Portfolio",
+    "project": "Projects",
+    "projects": "Projects",
+    "testimonial": "Testimonials",
+    "testimonials": "Testimonials",
+    "contact": "Contact",
+    "services": "Services",
+    "pricing": "Pricing",
+    "blog": "Blog",
+    "gallery": "Gallery",
 }
 
 
@@ -89,6 +113,21 @@ def _derive_entities_from_prompt(text: str) -> list[str]:
     if "seat" in text:
         entities.add("seats")
     return sorted(entities)
+
+
+def derive_sections_from_prompt(text: str) -> list[str]:
+    sections = []
+    for term, section in SECTION_TERMS.items():
+        if re.search(rf"\b{re.escape(term)}\b", text):
+            sections.append(section)
+    return list(dict.fromkeys(sections))
+
+
+def _is_static_marketing_or_portfolio(text: str) -> bool:
+    return bool(re.search(r"\b(portfolio|landing page|website|personal site|showcase)\b", text)) and not _contains_any(
+        text,
+        ["dashboard", "admin", "crm", "inventory", "booking system", "marketplace"],
+    )
 
 
 async def extract_intent(prompt: str, llm: LLMClient) -> IntentGraph:
@@ -160,6 +199,15 @@ Prompt to analyze:
                 if prompt_entities:
                     data["entities"] = sorted(set([*(data.get("entities") or []), *prompt_entities]))
                 data["features"] = sorted(set([*(data.get("features") or []), *_expected_features_from_prompt(lower)]))
+                if _is_static_marketing_or_portfolio(lower):
+                    data["product_type"] = "portfolio_site" if "portfolio" in lower else "website"
+                    data["roles"] = ["public"]
+                    data["entities"] = sorted(set(prompt_entities))
+                    data["assumptions"] = [
+                        assumption
+                        for assumption in (data.get("assumptions") or [])
+                        if "login" not in assumption.lower() and "authentication" not in assumption.lower()
+                    ]
             return IntentGraph(**data)
         except Exception:
             if llm.strict_llm:
@@ -172,7 +220,9 @@ Prompt to analyze:
         product_type = "template_unspecified"
     elif _contains_any(lower, ["galaxy", "croissant", "meow", "rocket", "smart fridge", "riddle", "3d", "space exploration", "dating app for plants"]):
         product_type = "creative_experience"
-    elif _contains_any(lower, ["crm", "contact", "deal"]):
+    elif _is_static_marketing_or_portfolio(lower):
+        product_type = "portfolio_site" if "portfolio" in lower else "website"
+    elif _contains_any(lower, ["crm", "deal"]) or re.search(r"\bcontacts\b", lower):
         product_type = "crm"
     elif _contains_any(lower, ["shop", "store", "ecommerce", "product", "cart"]):
         product_type = "ecommerce"
@@ -185,7 +235,7 @@ Prompt to analyze:
     else:
         product_type = "default"
 
-    roles = ["user"]
+    roles = ["public"] if product_type in {"portfolio_site", "website"} else ["user"]
     if _contains_any(lower, ["admin", "analytics", "reports", "metrics", "manage"]):
         roles.insert(0, "admin")
     if _contains_any(lower, ["premium", "subscription", "paid"]):
@@ -225,7 +275,7 @@ Prompt to analyze:
         features.append("ticket_purchase")
     if "seats" in entities and "seat_selection" not in features:
         features.append("seat_selection")
-    if "login" not in features and product_type != "creative_experience":
+    if "login" not in features and product_type not in {"creative_experience", "portfolio_site", "website"}:
         assumptions.append("Included email/password login because most generated business apps need authentication.")
         features.append("login")
     if not business_rules:

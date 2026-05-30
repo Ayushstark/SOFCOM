@@ -19,6 +19,25 @@ def _entity_fields(entity: str) -> list[DBColumn]:
         ]
     if entity in {"payments", "orders"}:
         return base + [DBColumn(name="amount", type=FieldType.money), DBColumn(name="status", type=FieldType.string)]
+    if entity == "work_samples":
+        return base + [
+            DBColumn(name="title", type=FieldType.string),
+            DBColumn(name="category", type=FieldType.string, required=False),
+            DBColumn(name="image_url", type=FieldType.string, required=False),
+            DBColumn(name="description", type=FieldType.text, required=False),
+        ]
+    if entity == "testimonials":
+        return base + [
+            DBColumn(name="client_name", type=FieldType.string),
+            DBColumn(name="quote", type=FieldType.text),
+            DBColumn(name="role", type=FieldType.string, required=False),
+        ]
+    if entity == "contact_messages":
+        return base + [
+            DBColumn(name="name", type=FieldType.string),
+            DBColumn(name="email", type=FieldType.email),
+            DBColumn(name="message", type=FieldType.text),
+        ]
     if entity == "events":
         return base + [
             DBColumn(name="title", type=FieldType.string),
@@ -59,7 +78,7 @@ def _entity_fields(entity: str) -> list[DBColumn]:
 
 
 async def generate_db_schema(arch: AppArchSpec, llm: LLMClient) -> list[DBTable]:
-    if llm.is_configured():
+    if llm.is_configured() and arch.product_type not in {"portfolio_site", "website"}:
         sys_prompt = f"""You are a Database Architect. Generate the database schema for: {arch.app_name}.
 Entities to include: {['users', *arch.entities]}
 For each table, provide the name and columns.
@@ -80,7 +99,7 @@ Always include an 'id' string column for every table.
 
 
 async def generate_api_schema(arch: AppArchSpec, llm: LLMClient) -> list[APIEndpoint]:
-    if llm.is_configured():
+    if llm.is_configured() and arch.product_type not in {"portfolio_site", "website"}:
         sys_prompt = f"""You are an API Architect. Generate the API schema for: {arch.app_name}.
 Entities: {arch.entities}
 Roles: {arch.roles}
@@ -97,9 +116,9 @@ Include CRUD endpoints for all entities and /auth/login.
                 raise
             pass
 
-    endpoints = [
-        APIEndpoint(path="/auth/login", method="POST", role_access=["public"], request_fields=["email"], response_entity="users")
-    ]
+    endpoints = []
+    if "Login" in arch.pages or any(role != "public" for role in arch.roles):
+        endpoints.append(APIEndpoint(path="/auth/login", method="POST", role_access=["public"], request_fields=["email"], response_entity="users"))
     for entity in sorted(set(arch.entities)):
         fields = [col.name for col in _entity_fields(entity) if col.name not in {"id", "created_at", "owner_id"}]
         endpoints.extend(
@@ -114,7 +133,7 @@ Include CRUD endpoints for all entities and /auth/login.
 
 
 async def generate_ui_schema(arch: AppArchSpec, llm: LLMClient) -> list[UIPage]:
-    if llm.is_configured():
+    if llm.is_configured() and arch.product_type not in {"portfolio_site", "website"}:
         sys_prompt = f"""You are a Frontend Architect. Generate the UI schema for: {arch.app_name}.
 Pages needed: {arch.pages}
 Roles: {arch.roles}
@@ -171,6 +190,16 @@ JSON Schema: list of objects with 'route', 'title', 'roles' (list), 'layout' (da
 
     existing_routes = {page.route for page in pages}
     page_entity_lookup = {entity.replace("_", " ").title(): entity for entity in arch.entities}
+    page_entity_lookup.update(
+        {
+            "Work": "work_samples" if "work_samples" in arch.entities else None,
+            "Work Samples": "work_samples" if "work_samples" in arch.entities else None,
+            "Portfolio": "projects" if "projects" in arch.entities else ("work_samples" if "work_samples" in arch.entities else None),
+            "Testimonials": "testimonials" if "testimonials" in arch.entities else None,
+            "Contact": "contact_messages" if "contact_messages" in arch.entities else None,
+            "About": None,
+        }
+    )
     page_entity_lookup["Account"] = "users"
     page_entity_lookup["Checkout"] = "orders" if "orders" in arch.entities else ("payments" if "payments" in arch.entities else None)
     page_entity_lookup["Seat Selection"] = "seats" if "seats" in arch.entities else None
@@ -183,6 +212,9 @@ JSON Schema: list of objects with 'route', 'title', 'roles' (list), 'layout' (da
         if page_name in {"Checkout", "Billing"}:
             layout = "billing"
             component_type = "button"
+        elif arch.product_type in {"portfolio_site", "website"}:
+            layout = "landing"
+            component_type = "form" if page_name == "Contact" else "list"
         elif page_name in {"Account", "Seat Selection"}:
             layout = "dashboard"
             component_type = "table" if page_name == "Seat Selection" else "form"
@@ -200,7 +232,7 @@ JSON Schema: list of objects with 'route', 'title', 'roles' (list), 'layout' (da
             UIPage(
                 route=route,
                 title=page_name,
-                roles=["public"] if page_name not in {"Checkout", "Account", "Seat Selection"} else arch.roles,
+                roles=["public"] if arch.product_type in {"portfolio_site", "website"} or page_name not in {"Checkout", "Account", "Seat Selection"} else arch.roles,
                 layout=layout,
                 components=[
                     UIComponent(

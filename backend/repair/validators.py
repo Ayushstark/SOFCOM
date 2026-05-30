@@ -23,7 +23,12 @@ def validate_config(config: AppConfig) -> list[ValidationIssue]:
     if not config.api_schema:
         issues.append(_issue("V002", "api", "At least one API endpoint is required.", "api_schema"))
     if "users" not in table_names:
-        issues.append(_issue("V003", "db", "A users table is required for auth-aware apps.", "db_schema"))
+        needs_auth = any(page.roles != ["public"] for page in config.ui_schema) or any(
+            endpoint.path.startswith("/auth/") or any(role != "public" for role in endpoint.role_access)
+            for endpoint in config.api_schema
+        )
+        if needs_auth:
+            issues.append(_issue("V003", "db", "A users table is required for auth-aware apps.", "db_schema"))
 
     for endpoint in config.api_schema:
         if endpoint.response_entity and endpoint.response_entity not in table_names:
