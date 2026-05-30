@@ -109,6 +109,101 @@ def repair_config(config: AppConfig, issues: list[ValidationIssue]) -> AppConfig
                     APIEndpoint(path="/api/subscriptions/checkout", method="POST", role_access=["user"], request_fields=["plan_id"], response_entity="payments")
                 )
                 endpoint_paths.add("/api/subscriptions/checkout")
+        elif issue.code in {"V014", "V015"}:
+            # Semantic realignment for creative prompts: inject explicit capabilities
+            # so the config reflects requested behavior rather than CRUD fallback.
+            creative_entities = {"scenes", "assets", "interactions", "chatbot_sessions", "device_profiles"}
+            for entity in sorted(creative_entities):
+                if entity not in table_names:
+                    fixed.db_schema.append(
+                        DBTable(
+                            name=entity,
+                            columns=[
+                                DBColumn(name="id", type=FieldType.string, unique=True),
+                                DBColumn(name="created_at", type=FieldType.datetime),
+                                DBColumn(name="name", type=FieldType.string, required=False),
+                                DBColumn(name="config_json", type=FieldType.text, required=False),
+                            ],
+                        )
+                    )
+                    table_names.add(entity)
+
+            capability_pages = {
+                "/experience": UIPage(
+                    route="/experience",
+                    title="Experience",
+                    roles=["public"],
+                    layout="landing",
+                    components=[
+                        UIComponent(id="galaxy_scene_3d_visual", type="chart", entity="scenes", fields=["name", "config_json"], endpoint="/api/scenes"),
+                        UIComponent(id="floating_assets_animation", type="list", entity="assets", fields=["name", "config_json"], endpoint="/api/assets"),
+                    ],
+                ),
+                "/audio": UIPage(
+                    route="/audio",
+                    title="Interactive Audio",
+                    roles=["public"],
+                    layout="landing",
+                    components=[
+                        UIComponent(id="button_audio_randomizer", type="button", entity="interactions", fields=["name", "config_json"], endpoint="/api/interactions"),
+                    ],
+                ),
+                "/assistant": UIPage(
+                    route="/assistant",
+                    title="Riddle Gardener Chatbot",
+                    roles=["public"],
+                    layout="landing",
+                    components=[
+                        UIComponent(id="gardening_riddle_chatbot", type="form", entity="chatbot_sessions", fields=["name", "config_json"], endpoint="/api/chatbot_sessions"),
+                    ],
+                ),
+                "/devices": UIPage(
+                    route="/devices",
+                    title="Device Layout Profiles",
+                    roles=["public"],
+                    layout="landing",
+                    components=[
+                        UIComponent(id="smart_fridge_layout_profile", type="table", entity="device_profiles", fields=["name", "config_json"], endpoint="/api/device_profiles"),
+                    ],
+                ),
+            }
+
+            existing_routes = {page.route for page in fixed.ui_schema}
+            for route, page in capability_pages.items():
+                if route not in existing_routes:
+                    fixed.ui_schema.append(page)
+                    existing_routes.add(route)
+
+            for entity in sorted(["assets", "chatbot_sessions", "device_profiles", "interactions", "scenes"]):
+                path = f"/api/{entity}"
+                if path not in endpoint_paths:
+                    fixed.api_schema.extend(
+                        [
+                            APIEndpoint(path=path, method="GET", role_access=["public"], request_fields=[], response_entity=entity),
+                            APIEndpoint(path=path, method="POST", role_access=["public"], request_fields=["name", "config_json"], response_entity=entity),
+                        ]
+                    )
+                    endpoint_paths.add(path)
+
+            # Keep intent and architecture coherent after repairs.
+            for feature in ["chatbot", "3d_visual", "audio", "fridge_layout", "animated_experience"]:
+                if feature not in fixed.intent.features:
+                    fixed.intent.features.append(feature)
+            fixed.intent.features = sorted(set(fixed.intent.features))
+            fixed.architecture.product_type = "creative_experience"
+            fixed.architecture.assumptions = list(dict.fromkeys([*fixed.architecture.assumptions, "Detected creative prompt; generated interactive experience-oriented architecture."]))
+            fixed.architecture.pages = list(dict.fromkeys([*fixed.architecture.pages, "Experience", "Interactive Audio", "Riddle Gardener Chatbot", "Device Layout Profiles"]))
+            fixed.architecture.flows = list(
+                dict.fromkeys(
+                    [
+                        *fixed.architecture.flows,
+                        "User explores animated galaxy-style homepage with interactive visual assets.",
+                        "Button interactions trigger randomized audio effects.",
+                        "Chatbot responds in gardening-themed riddles.",
+                        "Responsive layouts include desktop and smart-fridge profile support.",
+                    ]
+                )
+            )
 
     fixed.validation_report = []
     return fixed

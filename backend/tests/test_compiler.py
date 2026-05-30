@@ -22,3 +22,17 @@ async def test_vague_prompt_documents_assumptions():
     assert config.intent.ambiguity_score > 0.4
     assert config.assumptions
     assert config.runtime and config.runtime.executable
+
+
+@pytest.mark.anyio
+async def test_creative_prompt_is_not_collapsed_into_business_template():
+    prompt = (
+        "Make me a website thats a mix of coffee menu, space exploration game, and a dating app for plants. "
+        "Use galaxy background with floating croissants, random cat meow or rocket sounds on clicks, "
+        "a spinning 3D coffee cup, riddle gardening chatbot, and support desktop and smart fridge."
+    )
+    config, _ = await compile_prompt(prompt)
+
+    assert config.intent.product_type == "creative_experience"
+    assert any(feature in config.intent.features for feature in ["chatbot", "3d_visual", "audio", "fridge_layout"])
+    assert not [issue for issue in config.validation_report if issue.code in {"V014", "V015"}]

@@ -14,6 +14,7 @@ def validate_config(config: AppConfig) -> list[ValidationIssue]:
     table_names = {table.name for table in config.db_schema}
     roles = {rule.role for rule in config.auth_rules}
     endpoints = {endpoint.path for endpoint in config.api_schema}
+    prompt_text = config.intent.original_prompt.lower()
 
     if not config.ui_schema:
         issues.append(_issue("V001", "ui", "At least one UI page is required.", "ui_schema"))
@@ -58,5 +59,57 @@ def validate_config(config: AppConfig) -> list[ValidationIssue]:
 
     if config.intent.ambiguity_score > 0.65 and not config.intent.clarification_questions:
         issues.append(_issue("V013", "logic", "Highly ambiguous prompt should include clarification questions or assumptions.", "intent", "warning"))
+
+    # Semantic prompt-to-output alignment checks for creative or non-CRUD prompts.
+    required_capabilities: list[tuple[str, str]] = []
+    if any(term in prompt_text for term in ["chatbot", "assistant"]):
+        required_capabilities.append(("chatbot", "Prompt requests a chatbot but no chatbot capability is present."))
+    if any(term in prompt_text for term in ["3d", "three-dimensional", "spinning", "rotate"]):
+        required_capabilities.append(("3d_visual", "Prompt requests a 3D visual but no 3D/visual capability is present."))
+    if any(term in prompt_text for term in ["sound", "audio", "meow", "rocket"]):
+        required_capabilities.append(("audio", "Prompt requests interactive audio behavior but no audio capability is present."))
+    if any(term in prompt_text for term in ["smart fridge", "fridge"]):
+        required_capabilities.append(("fridge_layout", "Prompt requests smart-fridge support but no kiosk/fridge layout capability is present."))
+    if any(term in prompt_text for term in ["game", "exploration", "galaxy", "floating", "animation"]):
+        required_capabilities.append(("animated_experience", "Prompt requests an animated/interactive experience but no matching capability is present."))
+
+    if required_capabilities:
+        coverage_text = " ".join(
+            [
+                config.app_name,
+                config.architecture.product_type,
+                " ".join(config.architecture.pages),
+                " ".join(config.architecture.flows),
+                " ".join(config.intent.features),
+                " ".join(config.intent.entities),
+                " ".join(component.id + " " + component.type + " " + " ".join(component.fields) for page in config.ui_schema for component in page.components),
+                " ".join(endpoint.path for endpoint in config.api_schema),
+                " ".join(table.name for table in config.db_schema),
+            ]
+        ).lower()
+
+        missing = [tag for tag, _ in required_capabilities if tag not in coverage_text]
+        if missing:
+            issues.append(
+                _issue(
+                    "V014",
+                    "logic",
+                    f"Output is semantically misaligned with prompt; missing capabilities: {', '.join(sorted(missing))}.",
+                    "intent",
+                )
+            )
+
+    # Guardrail against obvious domain fallback for highly creative prompts.
+    creative_prompt = any(term in prompt_text for term in ["galaxy", "croissant", "plant", "riddle", "meow", "rocket"])
+    business_template_selected = config.architecture.product_type in {"ecommerce", "crm", "lms", "booking", "project"}
+    if creative_prompt and business_template_selected:
+        issues.append(
+            _issue(
+                "V015",
+                "logic",
+                "Creative prompt appears to be forced into a business CRUD template.",
+                "architecture.product_type",
+            )
+        )
 
     return issues

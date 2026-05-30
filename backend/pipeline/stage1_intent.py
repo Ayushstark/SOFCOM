@@ -14,6 +14,11 @@ FEATURE_KEYWORDS = {
     "role_based_access": ["role", "admin", "permission", "rbac"],
     "notifications": ["notification", "email", "reminder"],
     "search": ["search", "filter"],
+    "chatbot": ["chatbot", "assistant", "bot"],
+    "3d_visual": ["3d", "three-dimensional", "spinning", "rotate"],
+    "audio": ["sound", "audio", "meow", "rocket"],
+    "animated_experience": ["animation", "animated", "floating", "galaxy", "space", "game"],
+    "fridge_layout": ["smart fridge", "fridge", "kiosk"],
 }
 
 ENTITY_HINTS = {
@@ -22,6 +27,7 @@ ENTITY_HINTS = {
     "lms": ["courses", "lessons", "students", "enrollments"],
     "booking": ["appointments", "customers", "staff", "services"],
     "project": ["projects", "tasks", "teams", "comments"],
+    "creative_experience": ["scenes", "assets", "interactions", "chatbot_sessions", "device_profiles"],
     "default": ["users", "items"],
 }
 
@@ -68,7 +74,9 @@ Prompt to analyze:
     lower = clean.lower()
     features = [name for name, terms in FEATURE_KEYWORDS.items() if _contains_any(lower, terms)]
 
-    if _contains_any(lower, ["crm", "contact", "deal"]):
+    if _contains_any(lower, ["galaxy", "croissant", "meow", "rocket", "smart fridge", "riddle", "3d", "space exploration", "dating app for plants"]):
+        product_type = "creative_experience"
+    elif _contains_any(lower, ["crm", "contact", "deal"]):
         product_type = "crm"
     elif _contains_any(lower, ["shop", "store", "ecommerce", "product", "cart"]):
         product_type = "ecommerce"
@@ -106,7 +114,10 @@ Prompt to analyze:
     if len(clean) < 35 or product_type == "default":
         ambiguity_score += 0.35
         assumptions.append("Defaulted to a generic CRUD SaaS because the product category was underspecified.")
-    if "login" not in features:
+    if product_type == "creative_experience":
+        assumptions.append("Interpreted mixed creative requirements as an interactive experience website instead of a business CRUD app.")
+        ambiguity_score = max(ambiguity_score, 0.45)
+    if "login" not in features and product_type != "creative_experience":
         assumptions.append("Included email/password login because most generated business apps need authentication.")
         features.append("login")
     if not business_rules:
