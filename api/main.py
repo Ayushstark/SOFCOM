@@ -52,6 +52,7 @@ app.mount("/apps", StaticFiles(directory=GENERATED_ROOT), name="apps")
 
 class GenerateRequest(BaseModel):
     prompt: str = Field(min_length=3)
+    force_refresh: bool = False
 
 
 @app.get("/")
@@ -73,7 +74,7 @@ async def generate(request: GenerateRequest) -> dict:
     Returns the config, a detailed log of every pipeline step, and metrics.
     Does NOT run the full evaluation dataset.
     """
-    config, log = await compile_cached(request.prompt)
+    config, log = await compile_cached(request.prompt, force_refresh=request.force_refresh)
     return {
         "config": config.as_json_dict(),
         "log": log,

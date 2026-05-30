@@ -55,7 +55,11 @@ async def compile_prompt(prompt: str) -> tuple[AppConfig, list[dict[str, Any]]]:
     mode = llm.mode
 
     # ── Stage 1: Intent Extraction ───────────────────────────────────
-    log.info("intent", f"Extracting intent from prompt ({len(prompt)} chars)", {"mode": mode})
+    log.info(
+        "intent",
+        f"Extracting intent from prompt ({len(prompt)} chars)",
+        {"mode": mode, "strict_llm": llm.strict_llm, "provider": llm.provider, "model": llm.model},
+    )
     try:
         intent = await extract_intent(prompt, llm)
         log.info("intent", f"Extracted product_type={intent.product_type}, ambiguity={intent.ambiguity_score}", {

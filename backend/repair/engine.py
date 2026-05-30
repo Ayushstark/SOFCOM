@@ -204,6 +204,33 @@ def repair_config(config: AppConfig, issues: list[ValidationIssue]) -> AppConfig
                     ]
                 )
             )
+        elif issue.code in {"V016", "V017", "V018"}:
+            fixed.intent.ambiguity_score = max(fixed.intent.ambiguity_score, 0.85)
+            template_questions = [
+                "Should this be a website, an app, or both?",
+                "What is the exact niche or use-case?",
+                "Which pages/features are mandatory for v1 versus optional?",
+                "Should authentication and payments be included in v1?",
+            ]
+            fixed.intent.clarification_questions = list(dict.fromkeys([*fixed.intent.clarification_questions, *template_questions]))
+            fixed.intent.assumptions = list(
+                dict.fromkeys(
+                    [
+                        *fixed.intent.assumptions,
+                        "Detected unresolved placeholders; kept architecture domain-neutral until clarified.",
+                    ]
+                )
+            )
+            fixed.intent.product_type = "template_unspecified"
+            fixed.architecture.product_type = "template_unspecified"
+            fixed.architecture.assumptions = list(
+                dict.fromkeys(
+                    [
+                        *fixed.architecture.assumptions,
+                        "Detected unresolved placeholders; kept architecture domain-neutral until clarified.",
+                    ]
+                )
+            )
 
     fixed.validation_report = []
     return fixed

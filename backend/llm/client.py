@@ -22,6 +22,7 @@ class LLMClient:
         self.provider = os.getenv("LLM_PROVIDER", "deterministic-local").lower()
         self.api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         self.model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+        self.strict_llm = os.getenv("STRICT_LLM", "true").strip().lower() in {"1", "true", "yes", "on"}
 
     @property
     def mode(self) -> str:

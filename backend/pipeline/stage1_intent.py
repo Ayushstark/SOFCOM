@@ -38,7 +38,20 @@ def _contains_any(text: str, terms: list[str]) -> bool:
 
 async def extract_intent(prompt: str, llm: LLMClient) -> IntentGraph:
     clean = " ".join(prompt.strip().split())
-    
+    lower = clean.lower()
+    placeholder_tokens = re.findall(r"\[[^\]]+\]", clean)
+
+    def _expected_features_from_prompt(text: str) -> list[str]:
+        return sorted({name for name, terms in FEATURE_KEYWORDS.items() if _contains_any(text, terms)})
+
+    def _template_questions() -> list[str]:
+        return [
+            "Should this be a website, an app, or both?",
+            "What is the exact niche or use-case (for example portfolio, food delivery, or fitness tracker)?",
+            "Which pages/features are mandatory for v1 versus optional?",
+            "Do you want authentication and payments enabled in the first release?",
+        ]
+
     if llm.is_configured():
         sys_prompt = f"""You are an expert software architect analyzing a product prompt.
 Parse the user's intent into a structured JSON configuration matching this exact schema:
@@ -67,14 +80,35 @@ Prompt to analyze:
             data = await llm.generate_json(sys_prompt, temperature=0.1)
             # Ensure required fields if LLM hallucinated
             data["original_prompt"] = clean
+            # If prompt still contains placeholders, treat it as underspecified template input.
+            if placeholder_tokens:
+                data["product_type"] = "template_unspecified"
+                data["ambiguity_score"] = max(float(data.get("ambiguity_score", 0.0)), 0.85)
+                existing_assumptions = data.get("assumptions") or []
+                data["assumptions"] = list(
+                    dict.fromkeys(
+                        [
+                            *existing_assumptions,
+                            "Detected unresolved placeholders; generated a neutral template plan instead of committing to a single domain.",
+                        ]
+                    )
+                )
+                # Only keep features that are explicitly present in prompt text.
+                explicit_features = _expected_features_from_prompt(lower)
+                data["features"] = explicit_features
+                existing_questions = data.get("clarification_questions") or []
+                data["clarification_questions"] = list(dict.fromkeys([*existing_questions, *_template_questions()]))
             return IntentGraph(**data)
         except Exception:
+            if llm.strict_llm:
+                raise
             pass  # Fallback to deterministic below
 
-    lower = clean.lower()
     features = [name for name, terms in FEATURE_KEYWORDS.items() if _contains_any(lower, terms)]
 
-    if _contains_any(lower, ["galaxy", "croissant", "meow", "rocket", "smart fridge", "riddle", "3d", "space exploration", "dating app for plants"]):
+    if placeholder_tokens:
+        product_type = "template_unspecified"
+    elif _contains_any(lower, ["galaxy", "croissant", "meow", "rocket", "smart fridge", "riddle", "3d", "space exploration", "dating app for plants"]):
         product_type = "creative_experience"
     elif _contains_any(lower, ["crm", "contact", "deal"]):
         product_type = "crm"
@@ -111,6 +145,10 @@ Prompt to analyze:
     assumptions = []
     questions = []
     ambiguity_score = 0.15
+    if placeholder_tokens:
+        ambiguity_score = max(ambiguity_score, 0.85)
+        assumptions.append("Detected unresolved placeholders; generated a neutral template plan instead of a fixed domain app.")
+        questions.extend(_template_questions())
     if len(clean) < 35 or product_type == "default":
         ambiguity_score += 0.35
         assumptions.append("Defaulted to a generic CRUD SaaS because the product category was underspecified.")

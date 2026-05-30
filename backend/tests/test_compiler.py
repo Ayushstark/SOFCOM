@@ -36,3 +36,17 @@ async def test_creative_prompt_is_not_collapsed_into_business_template():
     assert config.intent.product_type == "creative_experience"
     assert any(feature in config.intent.features for feature in ["chatbot", "3d_visual", "audio", "fridge_layout"])
     assert not [issue for issue in config.validation_report if issue.code in {"V014", "V015"}]
+
+
+@pytest.mark.anyio
+async def test_template_prompt_with_placeholders_stays_domain_neutral_and_asks_questions():
+    prompt = (
+        "Create a modern, responsive [website/app] for [purpose or niche]. "
+        "Include [specific features] and use [color palette/style]. Add SEO and accessibility."
+    )
+    config, _ = await compile_prompt(prompt)
+
+    assert config.intent.product_type == "template_unspecified"
+    assert config.intent.ambiguity_score >= 0.7
+    assert config.intent.clarification_questions
+    assert not [issue for issue in config.validation_report if issue.code in {"V016", "V017", "V018"}]

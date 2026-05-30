@@ -42,9 +42,22 @@ Intent JSON:
             data["product_type"] = intent.product_type
             return AppArchSpec(**data)
         except Exception:
+            if llm.strict_llm:
+                raise
             pass  # Fallback
 
-    if intent.product_type == "creative_experience":
+    if intent.product_type == "template_unspecified":
+        pages = ["Home", "About", "Contact"]
+        if "login" in intent.features:
+            pages.append("Login")
+        if "payments" in intent.features:
+            pages.append("Billing")
+        flows = [
+            "Visitor lands on a responsive homepage with SEO-friendly structure and accessible content regions.",
+            "User navigates core informational sections while pending requirements are represented as configurable modules.",
+            "System waits for clarified niche and feature priorities before final domain schema lock-in.",
+        ]
+    elif intent.product_type == "creative_experience":
         pages = ["Home Experience", "Interactive Audio", "Riddle Chatbot", "Device Layout Profiles"]
         flows = [
             "Visitor lands on a galaxy-themed interactive homepage with animated assets.",

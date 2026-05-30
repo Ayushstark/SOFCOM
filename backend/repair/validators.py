@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from backend.schemas import AppConfig, ValidationIssue
@@ -111,5 +112,35 @@ def validate_config(config: AppConfig) -> list[ValidationIssue]:
                 "architecture.product_type",
             )
         )
+
+    has_placeholders = bool(re.search(r"\[[^\]]+\]", config.intent.original_prompt))
+    if has_placeholders:
+        if config.intent.ambiguity_score < 0.7:
+            issues.append(
+                _issue(
+                    "V016",
+                    "logic",
+                    "Prompt contains unresolved placeholders but ambiguity score is too low.",
+                    "intent.ambiguity_score",
+                )
+            )
+        if not config.intent.clarification_questions:
+            issues.append(
+                _issue(
+                    "V017",
+                    "logic",
+                    "Prompt contains unresolved placeholders but clarification questions are missing.",
+                    "intent.clarification_questions",
+                )
+            )
+        if config.architecture.product_type in {"crm", "ecommerce", "booking", "lms", "project"}:
+            issues.append(
+                _issue(
+                    "V018",
+                    "logic",
+                    "Template prompt was incorrectly locked to a specific business domain.",
+                    "architecture.product_type",
+                )
+            )
 
     return issues
