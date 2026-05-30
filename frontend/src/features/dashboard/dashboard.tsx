@@ -332,11 +332,17 @@ function PromptCenter({
   setPrompt: (v: string) => void
   tokenCount: number
   onTemplate: (t: string) => void
-  onGenerate: () => void
+  onGenerate: (inputPrompt?: string) => void
   loading: boolean
   userPromptHistory: string[]
 }) {
   const [historyOpen, setHistoryOpen] = useState(false)
+  const visibleHistory = useMemo(() => {
+    const base = [...userPromptHistory]
+    const typed = prompt.trim()
+    if (typed && !base.includes(typed)) base.unshift(typed)
+    return base.slice(0, 20)
+  }, [prompt, userPromptHistory])
 
   return (
     <Panel>
@@ -383,7 +389,7 @@ function PromptCenter({
           </button>
           <button
             disabled={loading || prompt.trim().length < 3}
-            onClick={onGenerate}
+            onClick={() => onGenerate(prompt)}
             className="glow-btn disabled:opacity-60"
           >
             <Play className="h-4 w-4" />
@@ -391,10 +397,10 @@ function PromptCenter({
           </button>
           {historyOpen && (
             <div className="absolute right-0 top-11 z-20 w-80 rounded-xl border border-white/10 bg-[#0b1220] p-2 shadow-card">
-              {userPromptHistory.length === 0 ? (
+              {visibleHistory.length === 0 ? (
                 <p className="px-2 py-1 text-xs text-text-secondary">No user prompt history yet.</p>
               ) : (
-                userPromptHistory.map((item, idx) => (
+                visibleHistory.map((item, idx) => (
                   <button
                     key={`${idx}-${item}`}
                     onClick={() => {
